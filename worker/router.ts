@@ -40,7 +40,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       });
     }
 
-    const roomMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)(?:\/([^/]+))?$/);
+    const roomMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/?(?:\/([^/]+))?\/?$/);
     if (!roomMatch) {
       return serveApp(request, env);
     }

@@ -8,12 +8,12 @@ export type Route =
   | { kind: "room"; roomId: string };
 
 export function parseRoute(pathname: string): Route {
-  const roomMatch = pathname.match(/^\/rooms\/([^/]+)$/);
+  const roomMatch = pathname.match(/^\/rooms\/([^/]+)\/?$/);
   if (roomMatch) {
     return { kind: "room", roomId: roomMatch[1] };
   }
 
-  const gameMatch = pathname.match(/^\/games\/([^/]+)$/);
+  const gameMatch = pathname.match(/^\/games\/([^/]+)\/?$/);
   if (gameMatch && isGameId(gameMatch[1])) {
     return { kind: "game", gameId: gameMatch[1] };
   }
