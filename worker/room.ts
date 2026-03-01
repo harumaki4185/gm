@@ -317,8 +317,8 @@ export class RoomDurableObject {
       }
     });
 
-    server.addEventListener("close", async () => {
-      await this.handleSocketClose(sessionId, server);
+    server.addEventListener("close", () => {
+      this.handleSocketClose(sessionId, server).catch(() => {});
     });
 
     return new Response(null, {
@@ -507,7 +507,10 @@ function maybeStartRoom(room: RoomRecord): void {
 }
 
 function getRoomStatusFromState(roomState: RoomRecord["gameState"]): RoomRecord["roomStatus"] {
-  if (roomState.type === "old-maid" && roomState.winnerSeat !== null) {
+  if (
+    roomState.type === "old-maid" &&
+    (roomState.winnerSeat !== null || roomState.hands.every((hand) => hand.length === 0))
+  ) {
     return "finished";
   }
   return "playing";

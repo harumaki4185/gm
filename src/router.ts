@@ -1,3 +1,4 @@
+import { GAME_MAP } from "./shared/games";
 import type { GameId } from "./shared/types";
 
 export type Route =
@@ -13,8 +14,8 @@ export function parseRoute(pathname: string): Route {
   }
 
   const gameMatch = pathname.match(/^\/games\/([^/]+)$/);
-  if (gameMatch) {
-    return { kind: "game", gameId: gameMatch[1] as GameId };
+  if (gameMatch && isGameId(gameMatch[1])) {
+    return { kind: "game", gameId: gameMatch[1] };
   }
 
   if (pathname === "/help") {
@@ -35,4 +36,8 @@ export function toPath(route: Route): string {
     case "room":
       return `/rooms/${route.roomId}`;
   }
+}
+
+function isGameId(value: string): value is GameId {
+  return Object.hasOwn(GAME_MAP, value);
 }

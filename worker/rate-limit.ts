@@ -6,6 +6,8 @@ interface RateLimitBucket {
   resetAt: number;
 }
 
+const ROOM_CREATE_BUCKET_KEY = "bucket:create_room";
+
 export class RateLimiterDurableObject {
   constructor(private readonly state: DurableObjectState) {}
 
@@ -48,7 +50,7 @@ export class RateLimiterDurableObject {
   }
 
   async alarm(): Promise<void> {
-    await this.state.storage.deleteAll();
+    await this.state.storage.delete(ROOM_CREATE_BUCKET_KEY);
   }
 }
 

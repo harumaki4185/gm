@@ -302,9 +302,12 @@ function buildOldMaidView(room: RoomRecord, state: OldMaidState, selfSeat: numbe
     };
   }
 
-  const seat = selfSeat ?? 0;
+  const seat = selfSeat;
   const opponentSeat = seat === 0 ? 1 : 0;
   const opponentHand = state.hands[opponentSeat] ?? [];
+  const targetableOpponentSlots = shuffle(
+    opponentHand.map((_, index) => index.toString())
+  ).map((value) => Number(value));
 
   return {
     kind: "old-maid",
@@ -315,7 +318,7 @@ function buildOldMaidView(room: RoomRecord, state: OldMaidState, selfSeat: numbe
     statusMessage: state.statusMessage,
     selfHand: [...(state.hands[seat] ?? [])].sort(compareCardLabels),
     opponentCardCount: opponentHand.length,
-    targetableOpponentSlots: opponentHand.map((_, index) => index),
+    targetableOpponentSlots,
     lastAction: state.lastAction
   };
 }
@@ -393,6 +396,12 @@ function applyOldMaidAction(room: RoomRecord, seat: number, action: ClientAction
   const winner = resolveOldMaidWinner(state);
   if (winner !== null) {
     room.roomStatus = "finished";
+    if (winner === -1) {
+      state.winnerSeat = null;
+      state.loserSeat = null;
+      state.statusMessage = "引き分けです";
+      return;
+    }
     state.winnerSeat = winner;
     state.loserSeat = winner === 0 ? 1 : 0;
     state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
@@ -551,9 +560,15 @@ function createOldMaidState(): OldMaidState {
 
   const winner = resolveOldMaidWinner(state);
   if (winner !== null) {
-    state.winnerSeat = winner;
-    state.loserSeat = winner === 0 ? 1 : 0;
-    state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
+    if (winner === -1) {
+      state.winnerSeat = null;
+      state.loserSeat = null;
+      state.statusMessage = "引き分けです";
+    } else {
+      state.winnerSeat = winner;
+      state.loserSeat = winner === 0 ? 1 : 0;
+      state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
+    }
   }
 
   return state;
@@ -620,7 +635,12 @@ function collapsePairs(hand: string[]): number {
   return removedPairs;
 }
 
-function resolveOldMaidWinner(state: OldMaidState): number | null {
+function resolveOldMaidWinner(state: OldMaidState): number | -1 | null {
+  if (state.hands[0].length === 0 && state.hands[1].length === 0) {
+    state.statusMessage = "引き分けです";
+    state.loserSeat = null;
+    return -1;
+  }
   if (state.hands[0].length === 0 && state.hands[1].length > 0) {
     return 0;
   }

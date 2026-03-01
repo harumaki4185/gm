@@ -1,144 +1,152 @@
-# Classic Duels コードレビュー (v2)
+# Classic Duels コードレビュー (v3)
 
-> レビュー日: 2026-03-01  
-> 対象: リポジトリ全体（20 ファイル、約 3,300 行）  
-> 前回レビュー: 同日の初回レビューで 21 件（C-5 / M-6 / m-10）を指摘
+> レビュー日: 2026-03-02  
+> 対象: リポジトリ全体（20 ファイル、約 3,800 行）  
+> 前回比の差分: ババ抜き実装、`room.ts` の即時終了対応、ヘルプ画面ババ抜き未追記
 
 ---
 
-## 前回指摘の修正確認
+## v2 で指摘した項目の確認
 
-全 21 件について修正を確認した。以下は確認結果の要約。
+v1 の 21 件は全て修正済（前回確認済み）。v2 の新規指摘 (N-1〜N-5, n-1〜n-6) のうち引き続き未対応の項目は下記のとおり。
 
-| ID | タイトル | 状態 | 確認のポイント |
-|---|---|---|---|
-| C-1 | `rematchVotes` の `sessionId` 漏洩 | ✅ 修正済 | `room.ts` L456-458: `playerId` → seat 番号に変換して返却 |
-| C-2 | WebSocket 接続時の無条件 `connected = true` | ✅ 修正済 | `room.ts` L297-298: `assert(participant.connected)` と `cleanup` 中のチェック追加 |
-| C-3 | `playerName` のサニタイズ不十分 | ✅ 修正済 | `utils.ts` L9-23: 制御文字除去 + 禁止ワードチェック |
-| C-4 | `roomId` が推測可能 | ✅ 修正済 | `utils.ts` L27: UUID 全体（ハイフン除去 = 32 hex = 128 bit） |
-| C-5 | API レート制限なし | ✅ 修正済 | `rate-limit.ts`: DO ベースの IP 単位レート制限を実装 |
-| M-1 | Worker 1,139 行の巨大ファイル | ✅ 修正済 | 9 ファイルに分割 |
-| M-2 | 放置ルーム自動破棄なし | ✅ 修正済 | `room.ts` L81-122: alarm による `waiting_expire` / `cleanup` |
-| M-3 | 切断時の勝敗処理なし | ✅ 修正済 | `games.ts` L167-224: `markDisconnectPending` / `finalizeByDisconnect` |
-| M-4 | じゃんけんで あいこ→再戦 の導線なし | ✅ 修正済 | `games.ts` L285-291: あいこ時に `round` をインクリメントして継続 |
-| M-5 | throw が一律 400 | ✅ 修正済 | `errors.ts`: `AppError(message, status)` パターン、全 throw に個別 status |
-| M-6 | `useEffect` 依存で二重フェッチ | ✅ 修正済 | `App.tsx` L148,158-163,271: `skipNextReconnectRef` + `refreshRevision` で分離 |
-| m-1 | `.gitignore` が空 | ✅ 修正済 | `node_modules/`, `dist/`, `.wrangler/`, `.DS_Store` 追加 |
-| m-2 | meta description なし | ✅ 修正済 | `index.html` L9-12 |
-| m-3 | ルーター不在 | ✅ 修正済 | `src/router.ts`: `Route` 型 + `parseRoute` / `toPath` |
-| m-4 | `parseResponse` の型安全性 | ✅ 修正済 | `App.tsx` L490,504-506: `isApiErrorBody` ガード + `ApiRequestError` クラス |
-| m-5 | ゲームタイトルのハードコード | ✅ 修正済 | `GameSurface.tsx` L118: `GAME_MAP[snapshot.gameId].title` |
-| m-6 | `GameView` の明示インポートなし | ✅ 修正済 | `games.ts` L5: `GameView` をインポート |
-| m-7 | `board[0].length` の null 安全 | ✅ 修正済 | `games.ts` L427-429: `getColumnCount` ヘルパーに統一 |
-| m-8 | WebSocket 再接続のバックオフなし | ✅ 修正済 | `App.tsx` L235-236: 指数バックオフ（max 10 秒） |
-| m-9 | `connect4-dropbar` のレスポンシブ | ✅ 修正済 | `GameSurface.tsx` L82: inline style で `repeat(cols, ...)` に動的設定 |
-| m-10 | `getNextHumanSeat` のフォールバック | ✅ 修正済 | `utils.ts` L46: `throw new AppError("空席がありません", 409)` |
+| v2 ID | タイトル | 状態 |
+|---|---|---|
+| N-1 | Rate limiter `deleteAll()` | ⚠️ 未対応（実害低） |
+| N-2 | `handleSocketClose` エラーハンドリング | ⚠️ 未対応 |
+| N-4 | ゲーム詳細→ルーム直接作成 | ⚠️ 未対応 |
+| N-5 | WS 再接続リトライ上限 | ⚠️ 未対応 |
+| n-1 | `router.ts` の `gameId` unsafe cast | ⚠️ 未対応 |
+| n-2 | `janken-actions` の columns 定義漏れ | ⚠️ 未対応 |
+| n-3 | `rematchVotes` UI 未使用 | ⚠️ 未対応 |
+| n-6 | `README.md` 構成未更新 | ⚠️ 一部更新（ババ抜き追記あり、worker 分割の記述なし） |
 
 ---
 
 ## 新規レビュー結果
 
+### 🔴 Critical
+
+なし。
+
 ### 🟠 Major
 
-#### N-1. `RateLimiterDurableObject.alarm()` が全バケットを削除する
+#### M-NEW-1. ババ抜きで相手の手札が 0 枚かつ自分がジョーカーのみの場合にゲーム終了しない
 
-- **ファイル**: `worker/rate-limit.ts` L51-52
-- `alarm()` で `deleteAll()` を呼んでいるため、複数キーのバケットが同時に存在する場合に未期限のバケットまで消える。現状は `create_room` のみなので実害は薄いが、将来キーを増やすと意図せずリセットされる。
-- **修正案**: 期限切れキーのみ個別 delete するか、1 key = 1 DO に設計変更する。
+- **ファイル**: `worker/games.ts` L623-631
+- `resolveOldMaidWinner` は _片方の手札が 0 かつ他方が 1 以上_ の場合のみ勝者を判定する。しかし**両方とも 0 枚**になるケースが論理的に存在する（配札時にペア除去で全カードが消える可能性）。
+- 53 枚（偶数ではない）のデッキなので数学的には片方の手札が残るはずだが、実装上 `resolveOldMaidWinner` が `null` を返すとゲームが永続的に `playing` 状態になりハングする。
+- **修正案**: `both === 0` のケースを「引き分け」として `finished` に遷移させる。
 
-#### N-2. `handleSocketClose` のエラーハンドリングがない
+```typescript
+if (state.hands[0].length === 0 && state.hands[1].length === 0) {
+  // 引き分け（通常発生しないが安全弁）
+  return -1; // or handle as draw
+}
+```
 
-- **ファイル**: `worker/room.ts` L314-316
-- `close` イベントハンドラから `handleSocketClose` を `async` で呼んでいるが、reject をキャッチしていない。storage アクセスに失敗すると uncaught promise rejection になり Workers ランタイムでログが流れるだけになる。
-- **修正案**: `.catch()` でエラーログを追記するか、`try/catch` で囲む。
+#### M-NEW-2. ババ抜きの `collapsePairs` がカード文字列の一致に依存しており同一ランクが 3 枚以上のとき不安定
 
-#### N-3. `rematchVotes` 内部ストレージに `playerId` を入れているが roomId 同様に推測リスクがある
+- **ファイル**: `worker/games.ts` L592-621
+- 各ランクの `pairCount = Math.floor(cards.length / 2)` を算出し、`pairCount * 2` 枚を `toRemove` に追加する。これ自体は正しい。
+  ただしペアを消した直後にさらにカードを引いて同ランクが 3 枚になった場合、`collapsePairs` は 1 ペアのみ消す（3 枚目は残る）。この動作は正しいが、**同じカードの識別に文字列 (`"AS"`, `"AH"` 等) を使っているため `toRemove` の `Set` は正しく動作する**。
+- ✅ 問題なし — ロジック確認済み。
 
-- **ファイル**: `worker/room.ts` L270, L278
-- `rematchVotes` は `player.id`（UUID）を格納しており、スナップショットでは seat 番号に変換している（C-1 修正済）。ただし `handleRematch` は `body.sessionId` を照合して `actor.id` を使う設計なので安全。
-- ✅ 問題なし — コメントのみ。
+#### M-NEW-3. ババ抜きの `opponentCardCount` と `targetableOpponentSlots` がシャッフルされていない
 
-#### N-4. `GameDetailPage` の「ルーム作成へ」ボタンがトップに戻されるだけ
+- **ファイル**: `worker/games.ts` L307-318
+- `targetableOpponentSlots` は `opponentHand.map((_, index) => index)` で生成される。相手の手札の _配列上の位置_ がそのままスロット番号として送信されるため、**連続する引き操作でカードの並び順が推測可能**になる。  
+  例: 前のターンでインデックス 3 を引いた後、自分のターンが回ってきたとき相手の手札配列は `splice` で 1 要素減っている。元のインデックス 4 以降がすべてシフトするので、繰り返し引く側は「前回引いた付近のカードがどれか」を推測しやすくなる。
+- **修正案**: `buildOldMaidView` で相手の手札をシャッフルしたインデックス配列を返す（または毎ターン相手の手札配列自体をシャッフルする）。
 
-- **ファイル**: `src/App.tsx` L453
-- `navigate({ kind: "home" })` に遷移するので、該当ゲームのルーム作成へ直接進む導線にはなっていない。ゲーム詳細ページからそのゲームのルームを直接作成できると UX が向上する。
+#### M-NEW-4. `handleSocketClose` の `async` コールバックが catch されない（v2 N-2 継続）
 
-#### N-5. WebSocket 再接続の最大リトライ数が未設定
+- **ファイル**: `worker/room.ts` L320-322
+- `server.addEventListener("close", async () => { await this.handleSocketClose(...) })` — reject が catch されずランタイム警告が出る。
 
-- **ファイル**: `src/App.tsx` L235-241
-- 指数バックオフは実装されたが、最大リトライ数（例: 10 回）の上限がない。サーバー長時間ダウン時に永続的にリトライし続ける。
-- 致命的ではないが、上限到達時に「サーバーに接続できません」とユーザーに明示すべき。
+```diff
+-    server.addEventListener("close", async () => {
+-      await this.handleSocketClose(sessionId, server);
++    server.addEventListener("close", () => {
++      this.handleSocketClose(sessionId, server).catch(() => {});
+     });
+```
+
+#### M-NEW-5. ヘルプ画面にババ抜きのルール説明がない
+
+- **ファイル**: `src/App.tsx` L471-476
+- ヘルプ画面には 4 ゲームのルールが記載されているが、新たに active になった「ババ抜き」の説明がない。
 
 ---
 
 ### 🟡 Minor
 
-#### n-1. `router.ts` の `parseRoute` で `gameId` の存在チェックがない
+#### m-NEW-1. `buildOldMaidView` で `selfSeat` が `null` 判定直後に `selfSeat ?? 0` を使用
 
-- **ファイル**: `src/router.ts` L17
-- `gameMatch[1] as GameId` は unsafe cast。`/games/invalid` が `GameDetailPage` に到達する。`GameDetailPage` 側で `GAME_MAP[gameId]` の null チェックがあるので表示は崩れないが、ルーター側でバリデーションすると型安全性が向上する。
+- **ファイル**: `worker/games.ts` L290-305
 
-#### n-2. `janken-actions` と `connect4-dropbar` の CSS `grid-template-columns` が style 属性と CSS クラスで二重定義される可能性
+```typescript
+if (selfSeat === null) {
+  return { ... };  // selfSeat === null のケースはここで return
+}
 
-- **ファイル**: `src/styles.css` L365-369, `src/components/GameSurface.tsx` L82
-- CSS では `.janken-actions, .connect4-dropbar { display: grid; gap: 10px; }` だけで `grid-template-columns` の初期値がないが、JSX 側で inline style を設定している。`janken-actions` は inline style なしのため CSS 側にも `grid-template-columns: repeat(3, minmax(0, 1fr))` を残すべき。
+const seat = selfSeat ?? 0;  // ← ここは常に selfSeat !== null
+```
 
-#### n-3. `rematchVotes` の型が `number[]` だがフロント側で未使用
+- `?? 0` は不要（到達時点で `selfSeat` は必ず非 null）。デッドコード的で紛らわしい。
 
-- **ファイル**: `src/shared/types.ts` L118
-- `RoomSnapshot.rematchVotes: number[]` は座席番号の配列だが、フロント側ではどこからも参照されていない。投票状態の UI 表示（「相手が再戦を希望しています」等）に使わないと、片方だけ投票した場合にフィードバックがない。
+#### m-NEW-2. `GameSurface.tsx` のババ抜きカード key に配列 index を使用
 
-#### n-4. `alarm()` 内の日時比較に timezone リスク
+- **ファイル**: `src/components/GameSurface.tsx` L103
 
-- **ファイル**: `worker/room.ts` L88
-- `new Date(room.lifecycleAlarm.at).getTime()` でパースしているが、`at` は `nowIso()` = `new Date().toISOString()` 由来なので UTC フォーマット。Workers ランタイムでは問題ないが、ローカルテスト時に注意。
-- ✅ 既存コンテキストでは問題なし。
+```tsx
+key={`${card}-${index}`}
+```
 
-#### n-5. `detail-card` が glass morphism 系カードの共通定義 (L67-78) に含まれない
+- `card` は `"AS"` のようなユニーク文字列なのでそれだけで十分。ソート済みなので index との組み合わせは不要。ただし同じカードが手札に 2 枚存在しないため実害なし。
+- ✅ 問題なし。
 
-- **ファイル**: `src/styles.css` L67-78
-- `.surface-card` は共通カード定義に含まれるが、`GameDetailPage` と `HelpPage` で `surface-card detail-card` クラスを使用しており `.detail-card` 自体は独自定義 (L456-458) が `max-width` のみ。`backdrop-filter` と `box-shadow` は `.surface-card` 経由で適用されるので見た目は問題ない。
-- ✅ 既存コンテキストでは問題なし — セレクタの意図のコメント追加を推奨。
+#### m-NEW-3. `old-maid` の `supportsBots: true` だが bot ロジック未実装
 
-#### n-6. `README.md` が更新されていない
+- **ファイル**: `src/shared/games.ts` L65
+- カタログで `supportsBots: true` になっているが、bot の行動ロジックは未実装。`fillWithBots: true` のデフォルト設定と組み合わさると、将来 3 人以上対応時に bot 席が作られるが動かない。
+- 現時点では 2 人専用なので実害なし。`PROGRESS.md` にも「ババ抜き bot 対応」は未完了と記載されているので意図的と思われる。
 
-- README には「カタログ定義のみ: ババ抜き、七並べ、スペード」「現段階ではカードゲームのロジックと bot 行動は未実装」とあり正確だが、worker 分割やレート制限・ルーター追加などの構成変更が反映されていない。
+#### m-NEW-4. `createRoomRequest` に `sessionId` をオプショナルで送れるが Client 側で送っていない
 
----
+- **ファイル**: `src/shared/types.ts` L145, `src/App.tsx` L74-77
+- `CreateRoomRequest.sessionId?` は定義されているが、`LandingPage.createRoom` では送っていない。`router.ts` L28 で `body.sessionId ?? crypto.randomUUID()` によりサーバー側で生成される。
+- 一貫性の問題はないが、使わないオプショナルフィールドを型に残すより明示的にサーバー生成のみにする方が型定義が明確になる。
 
-## SPEC との乖離まとめ（更新版）
+#### m-NEW-5. `janken-actions` に CSS `grid-template-columns` が未指定
 
-| SPEC 項目 | 状態 | 備考 |
-|---|---|---|
-| §7.1 離脱時の勝敗処理 | ✅ 対応 | 切断猶予後の不戦勝処理 |
-| §7.2 禁止ワード制御 | ✅ 対応 | 制御文字除去 + 禁止ワード判定 |
-| §7.4 切断通知 | ⚠️ 部分的 | connected 状態は通知されるが UI が弱い (n-3 関連) |
-| §7.7 管理機能 | ❌ 未実装 | 管理画面全般 |
-| §8.3 推測されにくいランダム値 | ✅ 対応 | UUID ベースへ変更 |
-| §8.3 API レート制限 | ✅ 対応 | DO ベースの制限 |
-| §8.4 ゲームロジック分離 | ✅ 対応 | worker/ 配下を分割 |
-| §9.2 ゲーム詳細ページ | ✅ 対応 | `/games/:id` を追加 |
-| §9.5 結果画面 | ⚠️ 部分的 | ゲーム画面内に表示されるが専用画面なし |
-| §9.6 ルール/ヘルプ画面 | ✅ 対応 | `/help` を追加 |
-| §10 放置ルーム自動破棄 | ✅ 対応 | alarm で自動破棄 |
-| §11.4 じゃんけん連戦テンポ | ✅ 対応 | あいこ時に次ラウンドへ継続 |
+- **ファイル**: `src/styles.css` L365-369
+- `.janken-actions` と `.connect4-dropbar` は `display: grid` だが `grid-template-columns` がない。`connect4-dropbar` は inline style で設定されるが、`janken-actions` は 3 ボタンが 1 列に並ぶ。
+- `grid-template-columns: repeat(3, minmax(0, 1fr))` を追加すると 3 ボタン横並びになり UX 向上。
+
+#### m-NEW-6. `README.md` に worker 分割の記述がまだない
+
+- **ファイル**: `README.md` L28-29
+- 「`worker/index.ts` — API ルーティングと Durable Object 実装」とあるが、実際には `router.ts`, `room.ts`, `games.ts`, `rate-limit.ts` 等に分割済。
 
 ---
 
-## ✅ 良い点（追加分）
+## ✅ 良い点
 
-- **`AppError` + `assert` パターン**: 全 throw に HTTP status が紐づき、エラーレスポンスが正確。`assert` ヘルパーで guard clause が簡潔に書けている。
-- **ライフサイクル alarm 設計**: `LifecycleAlarm` を `RoomRecord` に直接持たせることで、alarm のコンテキストを失わない設計になっている。
-- **`skipNextReconnectRef` による join-fetch 分離**: React effect の依存をいじるのではなく ref で制御し、宣言的な effect 構造を維持している。
-- **`getColumnCount` への統一**: null 安全共通ヘルパーを一箇所にまとめ、全関数から呼び出している。
+- **`getRoomStatusFromState` の追加**: ババ抜きは配札直後にペアが全消えすると即 `finished` になり得る。この edge case を `maybeStartRoom` と `handleRematch` で正しく処理している。
+- **ババ抜き view のプライバシー**: 相手のカードは枚数とスロット番号のみ返し、内容は一切見えない設計。
+- **`collapsePairs` のペア除去アルゴリズム**: `Map` でランク → カード配列を構築し、`Math.floor(length / 2)` で正確にペア数を算出。`Set` + `filter` で in-place 除去も正確。
+- **カード表示の絵文字変換**: `formatCard`, `cardClass` が正しくスート → Unicode 記号変換を行い、赤黒の色分けも CSS で適切に処理。
+- **即時終了のアラーム処理**: 配札直後に終了する場合も `cleanup` アラームが正しくセットされる。
 
 ---
 
 ## 推奨アクション（優先度順）
 
-1. **N-2** — `handleSocketClose` のエラーハンドリングを追加
-2. **N-1** — Rate limiter の `deleteAll()` を期限切れキーのみ削除に変更
-3. **N-5** — WebSocket 再接続に最大リトライ数を設定
-4. **N-4** — ゲーム詳細ページからのルーム作成ショートカットを追加
-5. **n-3** — `rematchVotes` を UI に反映して再戦待ちフィードバックを改善
-6. **n-6** — `README.md` を最新の構成に更新
+1. **M-NEW-4** — `handleSocketClose` のエラーキャッチを追加（1 行修正）
+2. **M-NEW-3** — 相手の手札スロットをシャッフルして位置推測を防止
+3. **M-NEW-5** — ヘルプ画面にババ抜きルールを追記
+4. **M-NEW-1** — 両手札 0 の安全弁を追加
+5. **m-NEW-5** — `janken-actions` に `grid-template-columns` を追加
+6. **m-NEW-1** — `selfSeat ?? 0` の不要な fallback を削除
+7. **m-NEW-6** — `README.md` の worker 構成を更新

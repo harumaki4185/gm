@@ -99,8 +99,8 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
             <span>自分の手札</span>
             <strong>{view.selfHand.length} 枚</strong>
             <div className="old-maid-hand">
-              {view.selfHand.map((card, index) => (
-                <div className={cardClass(card)} key={`${card}-${index}`}>
+              {view.selfHand.map((card) => (
+                <div className={cardClass(card)} key={card}>
                   {formatCard(card)}
                 </div>
               ))}

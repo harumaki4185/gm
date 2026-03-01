@@ -18,6 +18,7 @@ import type {
 
 const PLAYER_NAME_KEY = "classic-duels/player-name";
 const ROOM_SESSION_KEY = "classic-duels/session/";
+const MAX_SOCKET_RETRIES = 6;
 
 export default function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
@@ -59,26 +60,11 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
   }, [playerName]);
 
   const createRoom = async (gameId: CreateRoomRequest["gameId"]) => {
-    if (playerName.trim().length < 2) {
-      setError("表示名は 2 文字以上で入力してください。");
-      return;
-    }
-
     setPendingGameId(gameId);
     setError(null);
 
     try {
-      const response = await fetch("/api/rooms", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          gameId,
-          playerName
-        } satisfies CreateRoomRequest)
-      });
-
-      const payload = await parseResponse<RoomMutationResponse>(response);
-      window.localStorage.setItem(`${ROOM_SESSION_KEY}${payload.snapshot.roomId}`, payload.sessionId);
+      const payload = await createRoomOnServer(gameId, playerName);
       navigate({ kind: "room", roomId: payload.snapshot.roomId });
     } catch (requestError) {
       setError(getMessage(requestError));
@@ -147,6 +133,7 @@ function RoomPage({
   const [socketRevision, setSocketRevision] = useState(0);
   const skipNextReconnectRef = useRef(false);
   const reconnectBackoffRef = useRef(0);
+  const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -173,6 +160,7 @@ function RoomPage({
             setSnapshot(payload.snapshot);
             setError(null);
             reconnectBackoffRef.current = 0;
+            reconnectAttemptsRef.current = 0;
             setSocketRevision((value) => value + 1);
           }
           return;
@@ -222,6 +210,7 @@ function RoomPage({
           setSnapshot(payload.snapshot);
           setError(null);
           reconnectBackoffRef.current = 0;
+          reconnectAttemptsRef.current = 0;
         }
       } catch {
         setError("リアルタイム同期メッセージの解析に失敗しました。");
@@ -232,8 +221,13 @@ function RoomPage({
       if (intentionalClose) {
         return;
       }
+      if (reconnectAttemptsRef.current >= MAX_SOCKET_RETRIES) {
+        setError("リアルタイム接続の再試行上限に達しました。画面を再読み込みしてください。");
+        return;
+      }
       const delay = Math.min(1000 * 2 ** reconnectBackoffRef.current, 10000);
       reconnectBackoffRef.current += 1;
+      reconnectAttemptsRef.current += 1;
       reconnectTimerRef.current = window.setTimeout(() => {
         if (window.localStorage.getItem(`${ROOM_SESSION_KEY}${roomId}`) === sessionId) {
           setRefreshRevision((value) => value + 1);
@@ -357,7 +351,10 @@ function RoomPage({
             <ul className="player-list">
               {snapshot.players.map((player) => (
                 <li key={player.id}>
-                  <span>{player.name}</span>
+                  <span>
+                    {player.name}
+                    {snapshot.rematchVotes.includes(player.seat) ? " / 再戦投票済み" : ""}
+                  </span>
                   <strong>
                     {player.playerType === "bot" ? "BOT" : "Human"} / {player.connected ? "Online" : "Offline"}
                   </strong>
@@ -413,6 +410,9 @@ function GameDetailPage({
   navigate: (route: Route) => void;
 }) {
   const game = GAME_MAP[gameId];
+  const [playerName, setPlayerName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!game) {
     return (
       <main className="layout">
@@ -425,6 +425,19 @@ function GameDetailPage({
       </main>
     );
   }
+
+  const createRoom = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const payload = await createRoomOnServer(gameId, playerName);
+      navigate({ kind: "room", roomId: payload.snapshot.roomId });
+    } catch (requestError) {
+      setError(getMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <main className="layout">
@@ -446,11 +459,21 @@ function GameDetailPage({
             <dd>{game.supportsBots ? "あり" : "なし"}</dd>
           </div>
         </dl>
+        <label className="field">
+          <span>表示名</span>
+          <input
+            maxLength={20}
+            onChange={(event) => setPlayerName(event.target.value)}
+            placeholder="例: Player One"
+            value={playerName}
+          />
+        </label>
+        {error ? <p className="inline-error">{error}</p> : null}
         <div className="detail-card__actions">
           <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
             一覧へ戻る
           </button>
-          <button className="primary-button" onClick={() => navigate({ kind: "home" })}>
+          <button className="primary-button" disabled={pending || game.availability !== "active"} onClick={() => void createRoom()}>
             ルーム作成へ
           </button>
         </div>
@@ -473,6 +496,7 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
           <li>五目並べ: 15x15 盤で先に 5 連を作った側が勝ちです。</li>
           <li>四目並べ: 列を選んでディスクを落とし、縦横斜めに 4 連を作ります。</li>
           <li>じゃんけん: あいこなら自動で次ラウンドへ進みます。</li>
+          <li>ババ抜き: 相手の伏せ札から 1 枚引き、同じ数字のペアは自動で捨てられます。最後にジョーカーが残った側が負けです。</li>
         </ul>
         <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
           一覧へ戻る
@@ -509,4 +533,27 @@ class ApiRequestError extends Error {
   constructor(message: string, public readonly status: number) {
     super(message);
   }
+}
+
+async function createRoomOnServer(
+  gameId: CreateRoomRequest["gameId"],
+  playerName: string
+): Promise<RoomMutationResponse> {
+  if (playerName.trim().length < 2) {
+    throw new Error("表示名は 2 文字以上で入力してください。");
+  }
+
+  const response = await fetch("/api/rooms", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      gameId,
+      playerName
+    } satisfies CreateRoomRequest)
+  });
+
+  const payload = await parseResponse<RoomMutationResponse>(response);
+  window.localStorage.setItem(PLAYER_NAME_KEY, playerName);
+  window.localStorage.setItem(`${ROOM_SESSION_KEY}${payload.snapshot.roomId}`, payload.sessionId);
+  return payload;
 }
