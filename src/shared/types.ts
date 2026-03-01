@@ -115,7 +115,7 @@ export interface RoomSnapshot {
   players: ParticipantSummary[];
   selfSeat: number | null;
   selfPlayerId: string | null;
-  rematchVotes: string[];
+  rematchVotes: number[];
   gameView: GameView;
 }
 
@@ -166,4 +166,5 @@ export interface RematchRequest {
 
 export interface ApiErrorBody {
   error: string;
+  status?: number;
 }

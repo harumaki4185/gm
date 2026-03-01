@@ -1,3 +1,4 @@
+import { GAME_MAP } from "../shared/games";
 import type { BoardPosition, ClientAction, RoomSnapshot } from "../shared/types";
 
 interface GameSurfaceProps {
@@ -46,9 +47,7 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
     return (
       <section className="surface-card">
         <h2>じゃんけん</h2>
-        <p className="surface-status">
-          {view.phase === "finished" ? view.resultMessage : "手を選んでください"}
-        </p>
+        <p className="surface-status">{view.resultMessage ?? "手を選んでください"}</p>
         <div className="janken-slots">
           {snapshot.players.map((player, index) => (
             <div className="janken-slot" key={player.id}>
@@ -78,7 +77,10 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
       <section className="surface-card">
         <h2>四目並べ</h2>
         <p className="surface-status">{view.statusMessage}</p>
-        <div className="connect4-dropbar">
+        <div
+          className="connect4-dropbar"
+          style={{ gridTemplateColumns: `repeat(${view.cols}, minmax(0, 1fr))` }}
+        >
           {Array.from({ length: view.cols }, (_, col) => (
             <button
               className="drop-button"
@@ -113,7 +115,7 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
 
   return (
     <section className="surface-card">
-      <h2>{snapshot.gameId === "gomoku" ? "五目並べ" : "オセロ"}</h2>
+      <h2>{GAME_MAP[snapshot.gameId].title}</h2>
       <p className="surface-status">{view.statusMessage}</p>
       <div
         className={`board board--${view.kind}`}

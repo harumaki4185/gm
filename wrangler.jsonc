@@ -10,6 +10,10 @@
       {
         "name": "ROOMS",
         "class_name": "RoomDurableObject"
+      },
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "RateLimiterDurableObject"
       }
     ]
   },
@@ -17,6 +21,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["RoomDurableObject"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RateLimiterDurableObject"]
     }
   ]
 }

@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GameCard } from "./components/GameCard";
 import { GameSurface } from "./components/GameSurface";
-import { GAME_CATALOG } from "./shared/games";
+import { parseRoute, toPath, type Route } from "./router";
+import { GAME_CATALOG, GAME_MAP } from "./shared/games";
 import type {
   ActionRequest,
   ApiErrorBody,
   ClientAction,
   CreateRoomRequest,
+  GameId,
   JoinRoomRequest,
   ReconnectRoomRequest,
   RematchRequest,
@@ -18,28 +20,36 @@ const PLAYER_NAME_KEY = "classic-duels/player-name";
 const ROOM_SESSION_KEY = "classic-duels/session/";
 
 export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
 
   useEffect(() => {
-    const onPopState = () => setPath(window.location.pathname);
+    const onPopState = () => setRoute(parseRoute(window.location.pathname));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const navigate = (nextPath: string) => {
+  const navigate = (nextRoute: Route) => {
+    const nextPath = toPath(nextRoute);
     window.history.pushState({}, "", nextPath);
-    setPath(nextPath);
+    setRoute(nextRoute);
   };
 
-  const roomMatch = path.match(/^\/rooms\/([^/]+)$/);
-  if (roomMatch) {
-    return <RoomPage navigate={navigate} roomId={roomMatch[1]} />;
+  if (route.kind === "room") {
+    return <RoomPage navigate={navigate} roomId={route.roomId} />;
+  }
+
+  if (route.kind === "game") {
+    return <GameDetailPage gameId={route.gameId} navigate={navigate} />;
+  }
+
+  if (route.kind === "help") {
+    return <HelpPage navigate={navigate} />;
   }
 
   return <LandingPage navigate={navigate} />;
 }
 
-function LandingPage({ navigate }: { navigate: (path: string) => void }) {
+function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
   const [playerName, setPlayerName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
   const [pendingGameId, setPendingGameId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +79,7 @@ function LandingPage({ navigate }: { navigate: (path: string) => void }) {
 
       const payload = await parseResponse<RoomMutationResponse>(response);
       window.localStorage.setItem(`${ROOM_SESSION_KEY}${payload.snapshot.roomId}`, payload.sessionId);
-      navigate(`/rooms/${payload.snapshot.roomId}`);
+      navigate({ kind: "room", roomId: payload.snapshot.roomId });
     } catch (requestError) {
       setError(getMessage(requestError));
     } finally {
@@ -99,6 +109,9 @@ function LandingPage({ navigate }: { navigate: (path: string) => void }) {
             />
           </label>
           <p className="hero__note">ログインはありません。表示名とローカル保存したセッションで再接続します。</p>
+          <button className="ghost-button" onClick={() => navigate({ kind: "help" })}>
+            ルールとヘルプ
+          </button>
           {error ? <p className="inline-error">{error}</p> : null}
         </div>
       </section>
@@ -110,6 +123,7 @@ function LandingPage({ navigate }: { navigate: (path: string) => void }) {
             game={game}
             key={game.id}
             onCreate={createRoom}
+            onOpenDetails={(gameId) => navigate({ kind: "game", gameId })}
           />
         ))}
       </section>
@@ -122,14 +136,18 @@ function RoomPage({
   navigate
 }: {
   roomId: string;
-  navigate: (path: string) => void;
+  navigate: (route: Route) => void;
 }) {
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(() => window.localStorage.getItem(`${ROOM_SESSION_KEY}${roomId}`));
   const [joinName, setJoinName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const [socketRevision, setSocketRevision] = useState(0);
+  const skipNextReconnectRef = useRef(false);
+  const reconnectBackoffRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +155,14 @@ function RoomPage({
     const bootstrap = async () => {
       try {
         if (sessionId) {
+          if (skipNextReconnectRef.current) {
+            skipNextReconnectRef.current = false;
+            if (!cancelled) {
+              setSocketRevision((value) => value + 1);
+            }
+            return;
+          }
+
           const response = await fetch(`/api/rooms/${roomId}/reconnect`, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -146,6 +172,8 @@ function RoomPage({
           if (!cancelled) {
             setSnapshot(payload.snapshot);
             setError(null);
+            reconnectBackoffRef.current = 0;
+            setSocketRevision((value) => value + 1);
           }
           return;
         }
@@ -154,13 +182,18 @@ function RoomPage({
         const payload = await parseResponse<RoomSnapshot>(response);
         if (!cancelled) {
           setSnapshot(payload);
+          setError(null);
         }
       } catch (requestError) {
-        if (!cancelled) {
+        if (cancelled) {
+          return;
+        }
+        if (requestError instanceof ApiRequestError && [403, 404, 410].includes(requestError.status)) {
           window.localStorage.removeItem(`${ROOM_SESSION_KEY}${roomId}`);
           setSessionId(null);
-          setError(getMessage(requestError));
+          setSnapshot(null);
         }
+        setError(getMessage(requestError));
       }
     };
 
@@ -169,15 +202,17 @@ function RoomPage({
     return () => {
       cancelled = true;
     };
-  }, [roomId, sessionId]);
+  }, [roomId, sessionId, refreshRevision]);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || !snapshot) {
       return;
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/rooms/${roomId}/ws?sessionId=${encodeURIComponent(sessionId)}`);
+    const socket = new WebSocket(
+      `${protocol}//${window.location.host}/api/rooms/${roomId}/ws?sessionId=${encodeURIComponent(sessionId)}`
+    );
     let intentionalClose = false;
 
     socket.addEventListener("message", (event) => {
@@ -186,6 +221,7 @@ function RoomPage({
         if (payload.type === "snapshot") {
           setSnapshot(payload.snapshot);
           setError(null);
+          reconnectBackoffRef.current = 0;
         }
       } catch {
         setError("リアルタイム同期メッセージの解析に失敗しました。");
@@ -196,15 +232,20 @@ function RoomPage({
       if (intentionalClose) {
         return;
       }
-      window.setTimeout(() => {
+      const delay = Math.min(1000 * 2 ** reconnectBackoffRef.current, 10000);
+      reconnectBackoffRef.current += 1;
+      reconnectTimerRef.current = window.setTimeout(() => {
         if (window.localStorage.getItem(`${ROOM_SESSION_KEY}${roomId}`) === sessionId) {
-          setSocketRevision((value) => value + 1);
+          setRefreshRevision((value) => value + 1);
         }
-      }, 1200);
+      }, delay);
     });
 
     return () => {
       intentionalClose = true;
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
       socket.close();
     };
   }, [roomId, sessionId, socketRevision]);
@@ -227,6 +268,7 @@ function RoomPage({
       const payload = await parseResponse<RoomMutationResponse>(response);
       window.localStorage.setItem(PLAYER_NAME_KEY, joinName);
       window.localStorage.setItem(`${ROOM_SESSION_KEY}${roomId}`, payload.sessionId);
+      skipNextReconnectRef.current = true;
       setSessionId(payload.sessionId);
       setSnapshot(payload.snapshot);
     } catch (requestError) {
@@ -281,13 +323,15 @@ function RoomPage({
   const clearSession = () => {
     window.localStorage.removeItem(`${ROOM_SESSION_KEY}${roomId}`);
     setSessionId(null);
+    setSnapshot(null);
+    setRefreshRevision(0);
     setSocketRevision(0);
   };
 
   return (
     <main className="layout layout--room">
       <header className="room-header">
-        <button className="ghost-button" onClick={() => navigate("/")}>
+        <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
           一覧へ戻る
         </button>
         <div>
@@ -361,19 +405,108 @@ function RoomPage({
   );
 }
 
+function GameDetailPage({
+  gameId,
+  navigate
+}: {
+  gameId: GameId;
+  navigate: (route: Route) => void;
+}) {
+  const game = GAME_MAP[gameId];
+  if (!game) {
+    return (
+      <main className="layout">
+        <section className="surface-card detail-card">
+          <h1>ゲームが見つかりません</h1>
+          <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
+            一覧へ戻る
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="layout">
+      <section className="surface-card detail-card">
+        <p className="eyebrow">{game.category}</p>
+        <h1>{game.title}</h1>
+        <p className="hero__lead">{game.description}</p>
+        <dl className="game-card__meta">
+          <div>
+            <dt>状態</dt>
+            <dd>{game.availability === "active" ? "プレイ可能" : "実装予定"}</dd>
+          </div>
+          <div>
+            <dt>総席数</dt>
+            <dd>{game.totalSeats}</dd>
+          </div>
+          <div>
+            <dt>bot</dt>
+            <dd>{game.supportsBots ? "あり" : "なし"}</dd>
+          </div>
+        </dl>
+        <div className="detail-card__actions">
+          <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
+            一覧へ戻る
+          </button>
+          <button className="primary-button" onClick={() => navigate({ kind: "home" })}>
+            ルーム作成へ
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
+  return (
+    <main className="layout">
+      <section className="surface-card detail-card">
+        <p className="eyebrow">Help</p>
+        <h1>ルールと接続ガイド</h1>
+        <p className="hero__lead">
+          表示名だけで参加し、招待リンクを共有して対戦します。接続が切れても同じブラウザから戻れば再接続できます。
+        </p>
+        <ul className="help-list">
+          <li>オセロ: 挟める場所にだけ置けます。置けない場合は自動でパス判定されます。</li>
+          <li>五目並べ: 15x15 盤で先に 5 連を作った側が勝ちです。</li>
+          <li>四目並べ: 列を選んでディスクを落とし、縦横斜めに 4 連を作ります。</li>
+          <li>じゃんけん: あいこなら自動で次ラウンドへ進みます。</li>
+        </ul>
+        <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
+          一覧へ戻る
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function resolveGameTitle(gameId: RoomSnapshot["gameId"]): string {
   return GAME_CATALOG.find((game) => game.id === gameId)?.title ?? gameId;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as T | ApiErrorBody;
+  const payload: unknown = await response.json();
   if (!response.ok) {
-    const error = payload as ApiErrorBody;
-    throw new Error(error.error || "API request failed");
+    if (isApiErrorBody(payload)) {
+      throw new ApiRequestError(payload.error || "API request failed", payload.status ?? response.status);
+    }
+    throw new ApiRequestError("API request failed", response.status);
   }
   return payload as T;
 }
 
 function getMessage(error: unknown): string {
   return error instanceof Error ? error.message : "不明なエラーが発生しました。";
+}
+
+function isApiErrorBody(payload: unknown): payload is ApiErrorBody {
+  return typeof payload === "object" && payload !== null && "error" in payload;
+}
+
+class ApiRequestError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+  }
 }

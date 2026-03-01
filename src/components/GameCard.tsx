@@ -5,9 +5,10 @@ interface GameCardProps {
   game: GameCatalogEntry;
   busy: boolean;
   onCreate: (gameId: GameCatalogEntry["id"]) => void;
+  onOpenDetails: (gameId: GameCatalogEntry["id"]) => void;
 }
 
-export function GameCard({ game, busy, onCreate }: GameCardProps) {
+export function GameCard({ game, busy, onCreate, onOpenDetails }: GameCardProps) {
   return (
     <article className="game-card" style={{ "--accent": game.accent } as CSSProperties}>
       <div className="game-card__header">
@@ -33,13 +34,18 @@ export function GameCard({ game, busy, onCreate }: GameCardProps) {
           <dd>{game.supportsBots ? "対応予定" : "不要"}</dd>
         </div>
       </dl>
-      <button
-        className="primary-button"
-        disabled={busy || game.availability !== "active"}
-        onClick={() => onCreate(game.id)}
-      >
-        {game.availability === "active" ? "ルームを作成" : "実装待ち"}
-      </button>
+      <div className="game-card__actions">
+        <button className="ghost-button" onClick={() => onOpenDetails(game.id)}>
+          詳細
+        </button>
+        <button
+          className="primary-button"
+          disabled={busy || game.availability !== "active"}
+          onClick={() => onCreate(game.id)}
+        >
+          {game.availability === "active" ? "ルームを作成" : "実装待ち"}
+        </button>
+      </div>
     </article>
   );
 }
