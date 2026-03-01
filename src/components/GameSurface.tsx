@@ -72,6 +72,45 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
     );
   }
 
+  if (view.kind === "old-maid") {
+    return (
+      <section className="surface-card">
+        <h2>ババ抜き</h2>
+        <p className="surface-status">{view.statusMessage}</p>
+        {view.lastAction ? <p className="surface-status">{view.lastAction}</p> : null}
+        <div className="old-maid-layout">
+          <div className="old-maid-panel">
+            <span>相手の手札</span>
+            <strong>{view.opponentCardCount} 枚</strong>
+            <div className="old-maid-targets">
+              {view.targetableOpponentSlots.map((slot) => (
+                <button
+                  className="old-maid-card old-maid-card--hidden"
+                  disabled={!view.canAct}
+                  key={slot}
+                  onClick={() => onAction({ type: "draw_old_maid", targetIndex: slot })}
+                >
+                  ?
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="old-maid-panel">
+            <span>自分の手札</span>
+            <strong>{view.selfHand.length} 枚</strong>
+            <div className="old-maid-hand">
+              {view.selfHand.map((card, index) => (
+                <div className={cardClass(card)} key={`${card}-${index}`}>
+                  {formatCard(card)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (view.kind === "connect4") {
     return (
       <section className="surface-card">
@@ -176,4 +215,26 @@ function cellClass(value: number | null): string {
 
 function isHighlighted(line: BoardPosition[], row: number, col: number): boolean {
   return line.some((position) => position.row === row && position.col === col);
+}
+
+function formatCard(card: string): string {
+  if (card === "JOKER") {
+    return "JOKER";
+  }
+  const suitMap: Record<string, string> = {
+    S: "♠",
+    H: "♥",
+    D: "♦",
+    C: "♣"
+  };
+  return `${card.slice(0, -1)}${suitMap[card.slice(-1)] ?? ""}`;
+}
+
+function cardClass(card: string): string {
+  if (card === "JOKER") {
+    return "old-maid-card old-maid-card--joker";
+  }
+  const suit = card.slice(-1);
+  const red = suit === "H" || suit === "D";
+  return `old-maid-card ${red ? "old-maid-card--red" : "old-maid-card--black"}`;
 }

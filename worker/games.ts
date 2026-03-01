@@ -3,13 +3,15 @@ import type {
   BoardPosition,
   ClientAction,
   GameView,
-  JankenChoice
+  JankenChoice,
+  OldMaidView
 } from "../src/shared/types";
 import { AppError } from "./errors";
 import type {
   Connect4State,
   InternalGameState,
   JankenState,
+  OldMaidState,
   PlacementState,
   RoomRecord
 } from "./types";
@@ -77,6 +79,10 @@ export function createInitialGameState(gameId: keyof typeof GAME_MAP): InternalG
     };
   }
 
+  if (gameId === "old-maid") {
+    return createOldMaidState();
+  }
+
   return {
     type: "planned",
     title: GAME_MAP[gameId].title,
@@ -91,6 +97,11 @@ export function applyGameAction(room: RoomRecord, seat: number, action: ClientAc
 
   if (room.gameState.type === "janken") {
     applyJankenAction(room, seat, action);
+    return;
+  }
+
+  if (room.gameState.type === "old-maid") {
+    applyOldMaidAction(room, seat, action);
     return;
   }
 
@@ -131,6 +142,10 @@ export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
 
   if (state.type === "janken") {
     return buildJankenView(room, state, selfSeat);
+  }
+
+  if (state.type === "old-maid") {
+    return buildOldMaidView(room, state, selfSeat);
   }
 
   if (state.type === "connect4") {
@@ -175,6 +190,11 @@ export function markDisconnectPending(room: RoomRecord, seat: number, disconnect
     return;
   }
 
+  if (room.gameState.type === "old-maid") {
+    room.gameState.statusMessage = `${disconnectedName} の再接続を待っています。`;
+    return;
+  }
+
   room.gameState.statusMessage = `${disconnectedName} の再接続を待っています。`;
   if ("currentSeat" in room.gameState) {
     room.gameState.currentSeat = seat;
@@ -193,6 +213,11 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
       return;
     }
     room.gameState.resultMessage = room.gameState.resultMessage ?? "手を選んでください";
+    return;
+  }
+
+  if (room.gameState.type === "old-maid") {
+    room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} がカードを引く番です`;
     return;
   }
 
@@ -216,6 +241,13 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
     room.gameState.phase = "finished";
     room.gameState.winnerSeat = disconnectedSeat === 0 ? 1 : 0;
     room.gameState.resultMessage = `プレイヤー ${room.gameState.winnerSeat + 1} の不戦勝です`;
+    return;
+  }
+
+  if (room.gameState.type === "old-maid") {
+    room.gameState.winnerSeat = disconnectedSeat === 0 ? 1 : 0;
+    room.gameState.loserSeat = disconnectedSeat;
+    room.gameState.statusMessage = `プレイヤー ${room.gameState.winnerSeat + 1} の不戦勝です`;
     return;
   }
 
@@ -251,6 +283,40 @@ function buildJankenView(room: RoomRecord, state: JankenState, selfSeat: number 
     resultMessage: state.resultMessage,
     currentSeat: null,
     winnerSeat: state.winnerSeat
+  };
+}
+
+function buildOldMaidView(room: RoomRecord, state: OldMaidState, selfSeat: number | null): OldMaidView {
+  if (selfSeat === null) {
+    return {
+      kind: "old-maid",
+      canAct: false,
+      currentSeat: state.currentSeat,
+      winnerSeat: state.winnerSeat,
+      loserSeat: state.loserSeat,
+      statusMessage: state.statusMessage,
+      selfHand: [],
+      opponentCardCount: 0,
+      targetableOpponentSlots: [],
+      lastAction: state.lastAction
+    };
+  }
+
+  const seat = selfSeat ?? 0;
+  const opponentSeat = seat === 0 ? 1 : 0;
+  const opponentHand = state.hands[opponentSeat] ?? [];
+
+  return {
+    kind: "old-maid",
+    canAct: room.roomStatus === "playing" && selfSeat === state.currentSeat && opponentHand.length > 0,
+    currentSeat: state.currentSeat,
+    winnerSeat: state.winnerSeat,
+    loserSeat: state.loserSeat,
+    statusMessage: state.statusMessage,
+    selfHand: [...(state.hands[seat] ?? [])].sort(compareCardLabels),
+    opponentCardCount: opponentHand.length,
+    targetableOpponentSlots: opponentHand.map((_, index) => index),
+    lastAction: state.lastAction
   };
 }
 
@@ -294,6 +360,47 @@ function applyJankenAction(room: RoomRecord, seat: number, action: ClientAction)
   state.winnerSeat = result;
   state.resultMessage = `プレイヤー ${result + 1} の勝ちです`;
   room.roomStatus = "finished";
+}
+
+function applyOldMaidAction(room: RoomRecord, seat: number, action: ClientAction): void {
+  const state = room.gameState;
+  if (state.type !== "old-maid") {
+    throw new AppError("old-maid state ではありません", 500);
+  }
+  if (action.type !== "draw_old_maid") {
+    throw new AppError("この操作はババ抜きでは無効です", 400);
+  }
+  if (state.currentSeat !== seat) {
+    throw new AppError("あなたの手番ではありません", 403);
+  }
+
+  const opponentSeat = seat === 0 ? 1 : 0;
+  const opponentHand = state.hands[opponentSeat] ?? [];
+  if (action.targetIndex < 0 || action.targetIndex >= opponentHand.length) {
+    throw new AppError("そのカードは引けません", 409);
+  }
+
+  const [drawnCard] = opponentHand.splice(action.targetIndex, 1);
+  state.hands[seat].push(drawnCard);
+  const removedPairs = collapsePairs(state.hands[seat]);
+  const actorName = `プレイヤー ${seat + 1}`;
+  const opponentName = `プレイヤー ${opponentSeat + 1}`;
+  state.lastAction =
+    removedPairs > 0
+      ? `${actorName} が ${opponentName} から 1 枚引き、${removedPairs} 組のペアを捨てました`
+      : `${actorName} が ${opponentName} から 1 枚引きました`;
+
+  const winner = resolveOldMaidWinner(state);
+  if (winner !== null) {
+    room.roomStatus = "finished";
+    state.winnerSeat = winner;
+    state.loserSeat = winner === 0 ? 1 : 0;
+    state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
+    return;
+  }
+
+  state.currentSeat = opponentSeat;
+  state.statusMessage = `プレイヤー ${opponentSeat + 1} がカードを引く番です`;
 }
 
 function applyConnect4Action(room: RoomRecord, seat: number, action: ClientAction): void {
@@ -420,8 +527,130 @@ function resolveJanken(first: JankenChoice, second: JankenChoice): number | null
   return 1;
 }
 
+function createOldMaidState(): OldMaidState {
+  const deck = shuffle(createOldMaidDeck());
+  const hands: string[][] = [[], []];
+
+  deck.forEach((card, index) => {
+    hands[index % 2].push(card);
+  });
+
+  collapsePairs(hands[0]);
+  collapsePairs(hands[1]);
+
+  const startingSeat = Math.random() >= 0.5 ? 1 : 0;
+  const state: OldMaidState = {
+    type: "old-maid",
+    hands,
+    currentSeat: startingSeat,
+    winnerSeat: null,
+    loserSeat: null,
+    statusMessage: `プレイヤー ${startingSeat + 1} がカードを引く番です`,
+    lastAction: "配札を行いました"
+  };
+
+  const winner = resolveOldMaidWinner(state);
+  if (winner !== null) {
+    state.winnerSeat = winner;
+    state.loserSeat = winner === 0 ? 1 : 0;
+    state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
+  }
+
+  return state;
+}
+
 function createBoard(rows: number, cols: number): Array<Array<number | null>> {
   return Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
+}
+
+function createOldMaidDeck(): string[] {
+  const suits = ["S", "H", "D", "C"];
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  const deck: string[] = [];
+
+  for (const suit of suits) {
+    for (const rank of ranks) {
+      deck.push(`${rank}${suit}`);
+    }
+  }
+
+  deck.push("JOKER");
+  return deck;
+}
+
+function shuffle(cards: string[]): string[] {
+  const result = [...cards];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = result[index];
+    result[index] = result[swapIndex];
+    result[swapIndex] = current;
+  }
+  return result;
+}
+
+function collapsePairs(hand: string[]): number {
+  const counts = new Map<string, string[]>();
+  for (const card of hand) {
+    const rank = getCardRank(card);
+    if (rank === "JOKER") {
+      continue;
+    }
+    const bucket = counts.get(rank) ?? [];
+    bucket.push(card);
+    counts.set(rank, bucket);
+  }
+
+  const toRemove = new Set<string>();
+  let removedPairs = 0;
+  for (const cards of counts.values()) {
+    const pairCount = Math.floor(cards.length / 2);
+    for (let index = 0; index < pairCount * 2; index += 1) {
+      toRemove.add(cards[index]);
+    }
+    removedPairs += pairCount;
+  }
+
+  if (toRemove.size === 0) {
+    return 0;
+  }
+
+  const kept = hand.filter((card) => !toRemove.has(card));
+  hand.splice(0, hand.length, ...kept);
+  return removedPairs;
+}
+
+function resolveOldMaidWinner(state: OldMaidState): number | null {
+  if (state.hands[0].length === 0 && state.hands[1].length > 0) {
+    return 0;
+  }
+  if (state.hands[1].length === 0 && state.hands[0].length > 0) {
+    return 1;
+  }
+  return null;
+}
+
+function getCardRank(card: string): string {
+  if (card === "JOKER") {
+    return "JOKER";
+  }
+  return card.slice(0, -1);
+}
+
+function compareCardLabels(left: string, right: string): number {
+  return getCardSortIndex(left) - getCardSortIndex(right);
+}
+
+function getCardSortIndex(card: string): number {
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "JOKER"];
+  const suits = ["S", "H", "D", "C"];
+  const rank = getCardRank(card);
+  const rankIndex = ranks.indexOf(rank);
+  if (card === "JOKER") {
+    return rankIndex * 10;
+  }
+  const suit = card.slice(-1);
+  return rankIndex * 10 + suits.indexOf(suit);
 }
 
 function getColumnCount(board: Array<Array<number | null>>): number {

@@ -64,13 +64,28 @@ export interface Connect4State {
   statusMessage: string;
 }
 
+export interface OldMaidState {
+  type: "old-maid";
+  hands: string[][];
+  currentSeat: number;
+  winnerSeat: number | null;
+  loserSeat: number | null;
+  statusMessage: string;
+  lastAction: string | null;
+}
+
 export interface PlannedState {
   type: "planned";
   title: string;
   message: string;
 }
 
-export type InternalGameState = JankenState | PlacementState | Connect4State | PlannedState;
+export type InternalGameState =
+  | JankenState
+  | PlacementState
+  | Connect4State
+  | OldMaidState
+  | PlannedState;
 
 export const WAITING_ROOM_TTL_MS = 15 * 60 * 1000;
 export const FINISHED_ROOM_TTL_MS = 10 * 60 * 1000;

@@ -276,10 +276,16 @@ export class RoomDurableObject {
       .map((player) => player.id);
 
     if (humanPlayerIds.every((playerId) => room.rematchVotes.includes(playerId))) {
-      room.roomStatus = "playing";
       room.rematchVotes = [];
       room.gameState = createInitialGameState(room.gameId);
+      room.roomStatus = getRoomStatusFromState(room.gameState);
       room.lifecycleAlarm = null;
+      if (room.roomStatus === "finished") {
+        room.lifecycleAlarm = {
+          kind: "cleanup",
+          at: plusMs(nowIso(), FINISHED_ROOM_TTL_MS)
+        };
+      }
     }
 
     room.updatedAt = nowIso();
@@ -490,7 +496,21 @@ function maybeStartRoom(room: RoomRecord): void {
   room.roomStatus = "playing";
   room.rematchVotes = [];
   room.gameState = createInitialGameState(room.gameId);
+  room.roomStatus = getRoomStatusFromState(room.gameState);
   room.lifecycleAlarm = null;
+  if (room.roomStatus === "finished") {
+    room.lifecycleAlarm = {
+      kind: "cleanup",
+      at: plusMs(nowIso(), FINISHED_ROOM_TTL_MS)
+    };
+  }
+}
+
+function getRoomStatusFromState(roomState: RoomRecord["gameState"]): RoomRecord["roomStatus"] {
+  if (roomState.type === "old-maid" && roomState.winnerSeat !== null) {
+    return "finished";
+  }
+  return "playing";
 }
 
 function stripSession(player: StoredParticipant): ParticipantSummary {

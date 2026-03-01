@@ -453,6 +453,57 @@ button {
   gap: 14px;
 }
 
+.old-maid-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.old-maid-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.56);
+  border-radius: 20px;
+  padding: 16px;
+}
+
+.old-maid-targets,
+.old-maid-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.old-maid-card {
+  min-width: 68px;
+  min-height: 96px;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 26, 23, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 235, 219, 0.92));
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  font-weight: 700;
+}
+
+.old-maid-card--hidden {
+  background: linear-gradient(180deg, rgba(94, 58, 179, 0.18), rgba(16, 24, 32, 0.2));
+  color: var(--ink);
+}
+
+.old-maid-card--red {
+  color: #b43f32;
+}
+
+.old-maid-card--black {
+  color: #1d1a17;
+}
+
+.old-maid-card--joker {
+  color: #5e3ab3;
+  background: linear-gradient(180deg, rgba(94, 58, 179, 0.16), rgba(255, 255, 255, 0.92));
+}
+
 .detail-card {
   max-width: 880px;
 }

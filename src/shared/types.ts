@@ -73,6 +73,19 @@ export interface JankenView {
   winnerSeat: number | null;
 }
 
+export interface OldMaidView {
+  kind: "old-maid";
+  canAct: boolean;
+  currentSeat: number | null;
+  winnerSeat: number | null;
+  loserSeat: number | null;
+  statusMessage: string;
+  selfHand: string[];
+  opponentCardCount: number;
+  targetableOpponentSlots: number[];
+  lastAction: string | null;
+}
+
 export interface PlacementBoardView {
   kind: "gomoku" | "othello";
   rows: number;
@@ -103,6 +116,7 @@ export type GameView =
   | WaitingView
   | PlannedView
   | JankenView
+  | OldMaidView
   | PlacementBoardView
   | Connect4View;
 
@@ -153,6 +167,10 @@ export type ClientAction =
   | {
       type: "drop_disc";
       col: number;
+    }
+  | {
+      type: "draw_old_maid";
+      targetIndex: number;
     };
 
 export interface ActionRequest {

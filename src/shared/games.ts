@@ -59,7 +59,7 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     shortDescription: "ジョーカーを最後まで持っていたら負け。",
     description: "ペアを捨てながらカードを引き合う、古典的なトランプゲーム。",
     category: "card",
-    availability: "planned",
+    availability: "active",
     totalSeats: 2,
     minHumanPlayers: 2,
     supportsBots: true,
