@@ -22,8 +22,7 @@ export async function serveApp(request: Request, env: { ASSETS: Fetcher }): Prom
     return env.ASSETS.fetch(request);
   }
   const indexRequest = new Request(new URL("/index.html", request.url).toString(), {
-    method: "GET",
-    headers: request.headers
+    method: "GET"
   });
   return env.ASSETS.fetch(indexRequest);
 }

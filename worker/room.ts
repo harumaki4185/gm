@@ -414,7 +414,11 @@ export class RoomDurableObject {
         continue;
       }
       for (const socket of sockets) {
-        socket.close(1000, "room_closed");
+        try {
+          socket.close(1000, "room_closed");
+        } catch {
+          this.untrackSocket(player.sessionId, socket);
+        }
       }
     }
     this.connections.clear();
@@ -441,7 +445,11 @@ export class RoomDurableObject {
       snapshot: this.makeSnapshot(room, sessionId)
     });
     for (const socket of sockets) {
-      socket.send(payload);
+      try {
+        socket.send(payload);
+      } catch {
+        this.untrackSocket(sessionId, socket);
+      }
     }
   }
 
