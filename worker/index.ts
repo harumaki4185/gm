@@ -5,7 +5,6 @@ import type {
   ClientAction,
   CreateRoomRequest,
   GameId,
-  GameView,
   JankenChoice,
   JoinRoomRequest,
   ParticipantSummary,
@@ -186,48 +185,52 @@ export class RoomDurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
-    if (url.pathname === "/create" && request.method === "POST") {
-      const body = (await request.json()) as CreateRoomRequest & { roomId: string; sessionId: string };
-      return this.handleCreate(body);
-    }
-
-    if (url.pathname === "/join" && request.method === "POST") {
-      const body = (await request.json()) as JoinRoomRequest;
-      return this.handleJoin(body);
-    }
-
-    if (url.pathname === "/reconnect" && request.method === "POST") {
-      const body = (await request.json()) as ReconnectRoomRequest;
-      return this.handleReconnect(body);
-    }
-
-    if (url.pathname === "/actions" && request.method === "POST") {
-      const body = (await request.json()) as ActionRequest;
-      return this.handleAction(body);
-    }
-
-    if (url.pathname === "/rematch" && request.method === "POST") {
-      const body = (await request.json()) as RematchRequest;
-      return this.handleRematch(body);
-    }
-
-    if (url.pathname === "/state" && request.method === "GET") {
-      const sessionId = url.searchParams.get("sessionId");
-      const room = await this.requireRoom();
-      return json(this.makeSnapshot(room, sessionId));
-    }
-
-    if (url.pathname === "/ws" && request.method === "GET") {
-      const sessionId = url.searchParams.get("sessionId");
-      if (!sessionId) {
-        return apiError("sessionId が必要です", 400);
+      if (url.pathname === "/create" && request.method === "POST") {
+        const body = (await request.json()) as CreateRoomRequest & { roomId: string; sessionId: string };
+        return this.handleCreate(body);
       }
-      return this.handleWebSocket(sessionId);
-    }
 
-    return apiError("不明な room endpoint です", 404);
+      if (url.pathname === "/join" && request.method === "POST") {
+        const body = (await request.json()) as JoinRoomRequest;
+        return this.handleJoin(body);
+      }
+
+      if (url.pathname === "/reconnect" && request.method === "POST") {
+        const body = (await request.json()) as ReconnectRoomRequest;
+        return this.handleReconnect(body);
+      }
+
+      if (url.pathname === "/actions" && request.method === "POST") {
+        const body = (await request.json()) as ActionRequest;
+        return this.handleAction(body);
+      }
+
+      if (url.pathname === "/rematch" && request.method === "POST") {
+        const body = (await request.json()) as RematchRequest;
+        return this.handleRematch(body);
+      }
+
+      if (url.pathname === "/state" && request.method === "GET") {
+        const sessionId = url.searchParams.get("sessionId");
+        const room = await this.requireRoom();
+        return json(this.makeSnapshot(room, sessionId));
+      }
+
+      if (url.pathname === "/ws" && request.method === "GET") {
+        const sessionId = url.searchParams.get("sessionId");
+        if (!sessionId) {
+          return apiError("sessionId が必要です", 400);
+        }
+        return this.handleWebSocket(sessionId);
+      }
+
+      return apiError("不明な room endpoint です", 404);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
   }
 
   private async handleCreate(
@@ -571,12 +574,13 @@ function createInitialGameState(gameId: GameId): InternalGameState {
   }
 
   if (gameId === "gomoku") {
+    const board = createBoard(15, 15);
     return {
       type: "gomoku",
-      board: createBoard(15, 15),
+      board,
       currentSeat: startingSeat,
       winnerSeat: null,
-      legalMoves: getEmptyCells(createBoard(15, 15)),
+      legalMoves: getEmptyCells(board),
       winningLine: [],
       statusMessage: `プレイヤー ${startingSeat + 1} の手番です`
     };
@@ -781,7 +785,9 @@ function applyPlacementAction(room: RoomRecord, seat: number, action: ClientActi
 
 function buildView(room: RoomRecord, selfSeat: number | null): GameView {
   const game = GAME_MAP[room.gameId];
-  const connectedHumans = room.players.filter((player) => player.playerType === "human").length;
+  const connectedHumans = room.players.filter(
+    (player) => player.playerType === "human" && player.connected
+  ).length;
 
   if (room.roomStatus === "waiting") {
     return {
@@ -1117,6 +1123,16 @@ async function serveApp(request: Request, env: Env): Promise<Response> {
   if (isAssetRequest) {
     return env.ASSETS.fetch(request);
   }
-  const indexRequest = new Request(new URL("/", request.url).toString(), request);
+  const indexRequest = new Request(new URL("/index.html", request.url).toString(), request);
   return env.ASSETS.fetch(indexRequest);
+}
+
+function toErrorResponse(error: unknown): Response {
+  if (error instanceof Error) {
+    if (error.message === "ROOM_NOT_FOUND") {
+      return apiError("ルームが見つかりません", 404);
+    }
+    return apiError(error.message, 400);
+  }
+  return apiError("不明なエラーが発生しました", 500);
 }

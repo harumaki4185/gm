@@ -1,0 +1,37 @@
+# Classic Duels
+
+Cloudflare Workers と Durable Objects を前提にした、二人用オンライン古典ゲーム集の実装ベースです。
+
+## 現在の実装範囲
+
+- React + TypeScript のフロントエンド
+- Cloudflare Workers の API エントリポイント
+- Durable Object ベースのルーム管理
+- 招待リンクによるルーム作成 / 参加 / 再接続 / 再戦
+- WebSocket による状態同期
+- 実装済みゲーム
+  - オセロ
+  - 五目並べ
+  - 四目並べ
+  - じゃんけん
+- カタログ定義のみ
+  - ババ抜き
+  - 七並べ
+  - スペード
+
+## ファイル構成
+
+- `src/`
+  - React アプリ
+- `src/shared/`
+  - Worker / Client 共通の型とゲーム定義
+- `worker/index.ts`
+  - API ルーティングと Durable Object 実装
+- `SPEC.md`
+  - 要件と仕様書
+
+## 開発メモ
+
+- `wrangler.jsonc` で `RoomDurableObject` を束ねている
+- 現段階ではカードゲームのロジックと bot 行動は未実装
+- ログイン、ランキング、ランダムマッチングは意図的に入れていない
