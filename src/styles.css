@@ -711,6 +711,88 @@ button {
   gap: 10px;
 }
 
+.mahjong-meta,
+.mahjong-player-grid,
+.mahjong-rivers {
+  display: grid;
+  gap: 12px;
+}
+
+.mahjong-meta,
+.mahjong-player-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.mahjong-meta div,
+.mahjong-player,
+.mahjong-river {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.56);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.mahjong-player--current {
+  box-shadow: inset 0 0 0 2px rgba(22, 93, 182, 0.2);
+}
+
+.mahjong-player--winner {
+  box-shadow: inset 0 0 0 2px rgba(201, 138, 35, 0.34);
+}
+
+.mahjong-rivers {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.mahjong-river__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.mahjong-river__tiles,
+.mahjong-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mahjong-river__empty {
+  color: var(--muted);
+}
+
+.mahjong-tile {
+  min-width: 56px;
+  min-height: 76px;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 26, 23, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 235, 219, 0.92));
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.mahjong-tile--m {
+  color: #b43f32;
+}
+
+.mahjong-tile--p {
+  color: #165db6;
+}
+
+.mahjong-tile--s {
+  color: #1f8f4d;
+}
+
+.mahjong-tile--z {
+  color: #1d1a17;
+}
+
 .detail-card {
   max-width: 880px;
 }
@@ -752,6 +834,8 @@ button {
   .waiting-stats,
   .janken-actions,
   .spades-bids,
+  .mahjong-meta,
+  .mahjong-player-grid,
   .game-card__actions,
   .detail-card__actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -778,6 +862,8 @@ button {
   .waiting-stats,
   .janken-actions,
   .spades-bids,
+  .mahjong-meta,
+  .mahjong-player-grid,
   .game-card__actions,
   .detail-card__actions {
     grid-template-columns: 1fr;
@@ -785,5 +871,10 @@ button {
 
   .sevens-row {
     min-width: 520px;
+  }
+
+  .mahjong-tile {
+    min-width: 48px;
+    min-height: 68px;
   }
 }

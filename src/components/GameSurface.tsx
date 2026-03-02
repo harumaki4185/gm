@@ -2,6 +2,7 @@ import { GAME_MAP } from "../shared/games";
 import type { ClientAction, RoomSettings, RoomSnapshot } from "../shared/types";
 import { BoardSurface } from "./games/BoardSurface";
 import { JankenSurface } from "./games/JankenSurface";
+import { MahjongSurface } from "./games/MahjongSurface";
 import { OldMaidSurface } from "./games/OldMaidSurface";
 import { PlannedSurface } from "./games/PlannedSurface";
 import { SevensSurface } from "./games/SevensSurface";
@@ -59,6 +60,10 @@ export function GameSurface({
 
   if (view.kind === "spades") {
     return <SpadesSurface isSpectator={isSpectator} onAction={onAction} view={view} />;
+  }
+
+  if (view.kind === "mahjong") {
+    return <MahjongSurface isSpectator={isSpectator} onAction={onAction} view={view} />;
   }
 
   return <BoardSurface gameTitle={GAME_MAP[snapshot.gameId].title} onAction={onAction} view={view} />;

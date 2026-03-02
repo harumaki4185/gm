@@ -711,6 +711,9 @@ function getRoomStatusFromState(roomState: RoomRecord["gameState"]): RoomRecord[
   if (roomState.type === "spades" && roomState.stage === "finished") {
     return "finished";
   }
+  if (roomState.type === "mahjong" && roomState.phase === "finished") {
+    return "finished";
+  }
   return "playing";
 }
 

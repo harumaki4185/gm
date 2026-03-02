@@ -5,7 +5,8 @@ export const GAME_IDS = [
   "janken",
   "old-maid",
   "sevens",
-  "spades"
+  "spades",
+  "mahjong"
 ] as const;
 
 export type GameId = (typeof GAME_IDS)[number];
@@ -19,7 +20,7 @@ export interface GameCatalogEntry {
   title: string;
   shortDescription: string;
   description: string;
-  category: "board" | "card" | "party";
+  category: "board" | "card" | "party" | "table";
   availability: Availability;
   defaultSeats: number;
   minSeats: number;
@@ -176,6 +177,41 @@ export interface SpadesView {
   spadesBroken: boolean;
 }
 
+export interface MahjongPlayerView {
+  seat: number;
+  name: string;
+  handCount: number;
+  discardCount: number;
+  isCurrent: boolean;
+  isDealer: boolean;
+  isWinner: boolean;
+}
+
+export interface MahjongDiscardView {
+  seat: number;
+  name: string;
+  tiles: string[];
+}
+
+export interface MahjongView {
+  kind: "mahjong";
+  phase: "playing" | "finished";
+  canAct: boolean;
+  currentSeat: number | null;
+  dealerSeat: number;
+  roundLabel: string;
+  wallCount: number;
+  deadWallCount: number;
+  doraIndicator: string | null;
+  winnerSeats: number[];
+  statusMessage: string;
+  lastAction: string | null;
+  finishReason: string | null;
+  selfHand: string[];
+  players: MahjongPlayerView[];
+  discards: MahjongDiscardView[];
+}
+
 export interface PlacementBoardView {
   kind: "gomoku" | "othello";
   rows: number;
@@ -209,6 +245,7 @@ export type GameView =
   | OldMaidView
   | SevensView
   | SpadesView
+  | MahjongView
   | PlacementBoardView
   | Connect4View;
 
@@ -274,6 +311,10 @@ export type ClientAction =
   | {
       type: "bid_spades";
       bid: number;
+    }
+  | {
+      type: "mahjong_discard";
+      tile: string;
     };
 
 export interface ActionRequest {

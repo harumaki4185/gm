@@ -92,8 +92,8 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
           <p className="eyebrow">Classic Duels</p>
           <h1>二人で始める古典ゲーム集</h1>
           <p className="hero__lead">
-            招待リンクで即開始できるオンライン対戦サイト。オセロ、五目並べ、四目並べ、じゃんけん、ババ抜き、七並べ、スペードを
-            ログインなしで遊べます。
+            招待リンクで即開始できるオンライン対戦サイト。オセロ、五目並べ、四目並べ、じゃんけん、ババ抜き、七並べ、スペードに加え、
+            麻雀の 4 人卓プロトタイプもログインなしで遊べます。
           </p>
         </div>
         <div className="hero__panel">
@@ -614,6 +614,7 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
           <li>ババ抜き: 2 人から 4 人まで対応し、bot 補充も可能です。手番では前の席の伏せ札から 1 枚引きます。</li>
           <li>七並べ: 2 人から 4 人まで対応し、7 は自動で場に並びます。出せるカードがないときだけパスできます。</li>
           <li>スペード: 4 席固定の 2 対 2 戦です。全員がビッドした後に 13 トリックを行い、1 ハンドの得点で勝敗を決めます。</li>
+          <li>麻雀: 4 席固定の試作版です。現在は配牌、自摸、打牌、河表示、bot 進行まで対応しています。</li>
         </ul>
         <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
           一覧へ戻る
@@ -664,6 +665,12 @@ function getGameRules(gameId: GameId): string[] {
         "出されたマークがあればそのマークを優先して出します。",
         "13 トリック終了後、チーム得点が高い側の勝ちです。"
       ];
+    case "mahjong":
+      return [
+        "4 人固定の卓です。現在は配牌、自摸、打牌、河表示までの基礎段階です。",
+        "親から打牌を始め、次の席が自動で自摸して手番を進めます。",
+        "役判定や鳴き、立直、点数計算はこれから段階的に追加します。"
+      ];
     default:
       return [];
   }
@@ -678,6 +685,7 @@ function resolveCurrentSeat(gameView: RoomSnapshot["gameView"]): number | null {
     case "old-maid":
     case "sevens":
     case "spades":
+    case "mahjong":
     case "gomoku":
     case "othello":
     case "connect4":
@@ -693,6 +701,7 @@ function resolveWinnerSeats(gameView: RoomSnapshot["gameView"]): number[] {
     case "old-maid":
     case "sevens":
     case "spades":
+    case "mahjong":
       return gameView.winnerSeats;
     case "gomoku":
     case "othello":
@@ -729,6 +738,11 @@ function resolvePlayerResultLabel(snapshot: RoomSnapshot, seat: number): string 
         return "引き分け";
       }
       return gameView.winnerSeats.includes(seat) ? "勝利" : "敗北";
+    case "mahjong":
+      if (gameView.winnerSeats.length === 0) {
+        return "流局";
+      }
+      return gameView.winnerSeats.includes(seat) ? "和了" : "敗北";
     case "old-maid":
       if (gameView.loserSeat === null) {
         return gameView.winnerSeats.length === 0 ? "引き分け" : gameView.winnerSeats.includes(seat) ? "勝利" : null;

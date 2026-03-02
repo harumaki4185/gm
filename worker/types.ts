@@ -105,6 +105,23 @@ export interface SpadesState {
   lastAction: string | null;
 }
 
+export interface MahjongState {
+  type: "mahjong";
+  phase: "playing" | "finished";
+  roundLabel: string;
+  dealerSeat: number;
+  currentSeat: number | null;
+  hands: string[][];
+  discards: string[][];
+  wall: string[];
+  deadWall: string[];
+  doraIndicator: string | null;
+  winnerSeats: number[];
+  statusMessage: string;
+  lastAction: string | null;
+  finishReason: string | null;
+}
+
 export interface PlannedState {
   type: "planned";
   title: string;
@@ -118,6 +135,7 @@ export type InternalGameState =
   | OldMaidState
   | SevensState
   | SpadesState
+  | MahjongState
   | PlannedState;
 
 export const WAITING_ROOM_TTL_MS = 15 * 60 * 1000;

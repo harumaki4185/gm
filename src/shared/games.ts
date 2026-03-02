@@ -98,6 +98,20 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     minHumanPlayers: 1,
     supportsBots: true,
     accent: "#101820"
+  },
+  {
+    id: "mahjong",
+    title: "麻雀",
+    shortDescription: "4人卓の試作段階。配牌と自摸打牌から固める麻雀基盤。",
+    description: "4席固定。現在は配牌、自摸、打牌、河表示、ドラ表示、bot 進行までの基礎実装を進めている。",
+    category: "table",
+    availability: "active",
+    defaultSeats: 4,
+    minSeats: 4,
+    maxSeats: 4,
+    minHumanPlayers: 1,
+    supportsBots: true,
+    accent: "#2e6e50"
   }
 ];
 

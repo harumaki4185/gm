@@ -36,6 +36,12 @@ import {
   buildSpadesView,
   createSpadesState
 } from "./spades";
+import {
+  advanceMahjongBotTurns,
+  applyMahjongAction,
+  buildMahjongView,
+  createMahjongState
+} from "./mahjong";
 
 export function buildWaitingState(gameId: keyof typeof GAME_MAP): InternalGameState {
   return {
@@ -76,6 +82,10 @@ export function createInitialGameState(gameId: keyof typeof GAME_MAP, seatCount:
     return createSpadesState(seatCount);
   }
 
+  if (gameId === "mahjong") {
+    return createMahjongState(seatCount);
+  }
+
   return {
     type: "planned",
     title: GAME_MAP[gameId].title,
@@ -105,6 +115,11 @@ export function applyGameAction(room: RoomRecord, seat: number, action: ClientAc
 
   if (room.gameState.type === "spades") {
     applySpadesAction(room, seat, action);
+    return;
+  }
+
+  if (room.gameState.type === "mahjong") {
+    applyMahjongAction(room, seat, action);
     return;
   }
 
@@ -173,6 +188,10 @@ export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
 
   if (state.type === "spades") {
     return buildSpadesView(room, state, selfSeat);
+  }
+
+  if (state.type === "mahjong") {
+    return buildMahjongView(room, state, selfSeat);
   }
 
   return buildBoardView(room, selfSeat);
@@ -244,6 +263,14 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
     return;
   }
 
+  if (room.gameState.type === "mahjong") {
+    if (room.gameState.phase === "finished" || room.gameState.currentSeat === null) {
+      return;
+    }
+    room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "が打牌する番です");
+    return;
+  }
+
   if (room.gameState.type === "connect4") {
     room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "の手番です");
     return;
@@ -297,6 +324,15 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
     return;
   }
 
+  if (room.gameState.type === "mahjong") {
+    room.gameState.phase = "finished";
+    room.gameState.currentSeat = null;
+    room.gameState.winnerSeats = remainingSeats;
+    room.gameState.finishReason = "参加者切断による終了";
+    room.gameState.statusMessage = formatWinnerMessage(room, remainingSeats, "不戦勝です");
+    return;
+  }
+
   const winnerSeat = remainingSeats[0] ?? null;
   room.gameState.winnerSeat = winnerSeat;
   room.gameState.statusMessage =
@@ -334,5 +370,10 @@ export function advanceAutomatedTurns(room: RoomRecord): void {
 
   if (room.gameState.type === "spades") {
     advanceSpadesBotTurns(room);
+    return;
+  }
+
+  if (room.gameState.type === "mahjong") {
+    advanceMahjongBotTurns(room);
   }
 }
