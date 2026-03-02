@@ -1,3 +1,4 @@
+import { formatCardLabel, isRedCard } from "../../shared/cards";
 import type { ClientAction, OldMaidView } from "../../shared/types";
 
 interface OldMaidSurfaceProps {
@@ -45,7 +46,7 @@ export function OldMaidSurface({ view, onAction }: OldMaidSurfaceProps) {
           <div className="old-maid-hand">
             {view.selfHand.map((card) => (
               <div className={cardClass(card)} key={card}>
-                {formatCard(card)}
+                {formatCardLabel(card)}
               </div>
             ))}
           </div>
@@ -55,24 +56,10 @@ export function OldMaidSurface({ view, onAction }: OldMaidSurfaceProps) {
   );
 }
 
-function formatCard(card: string): string {
-  if (card === "JOKER") {
-    return "JOKER";
-  }
-  const suitMap: Record<string, string> = {
-    S: "♠",
-    H: "♥",
-    D: "♦",
-    C: "♣"
-  };
-  return `${card.slice(0, -1)}${suitMap[card.slice(-1)] ?? ""}`;
-}
-
 function cardClass(card: string): string {
   if (card === "JOKER") {
     return "old-maid-card old-maid-card--joker";
   }
-  const suit = card.slice(-1);
-  const red = suit === "H" || suit === "D";
+  const red = isRedCard(card);
   return `old-maid-card ${red ? "old-maid-card--red" : "old-maid-card--black"}`;
 }

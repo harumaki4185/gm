@@ -520,6 +520,33 @@ button {
   gap: 10px;
 }
 
+.sevens-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.playing-card {
+  min-width: 68px;
+  min-height: 96px;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 26, 23, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 235, 219, 0.92));
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.playing-card--red {
+  color: #b43f32;
+}
+
+.playing-card--black {
+  color: #1d1a17;
+}
+
 .old-maid-card {
   min-width: 68px;
   min-height: 96px;
@@ -548,6 +575,100 @@ button {
 .old-maid-card--joker {
   color: #5e3ab3;
   background: linear-gradient(180deg, rgba(94, 58, 179, 0.16), rgba(255, 255, 255, 0.92));
+}
+
+.sevens-player-grid,
+.spades-team-grid,
+.spades-trick {
+  display: grid;
+  gap: 12px;
+}
+
+.sevens-player-grid,
+.spades-team-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.sevens-player,
+.spades-team,
+.spades-trick__slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.56);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.sevens-player--current {
+  box-shadow: inset 0 0 0 2px rgba(22, 93, 182, 0.2);
+}
+
+.sevens-player--winner,
+.spades-team--winner {
+  box-shadow: inset 0 0 0 2px rgba(201, 138, 35, 0.34);
+}
+
+.sevens-table {
+  display: grid;
+  gap: 10px;
+}
+
+.sevens-row {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.sevens-row__suit {
+  display: grid;
+  place-items: center;
+  min-height: 52px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.56);
+  font-size: 1.4rem;
+}
+
+.sevens-row__suit--red {
+  color: #b43f32;
+}
+
+.sevens-row__cards {
+  display: grid;
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sevens-slot {
+  min-height: 48px;
+  border-radius: 12px;
+  background: rgba(29, 26, 23, 0.06);
+  display: grid;
+  place-items: center;
+  font-size: 0.82rem;
+  color: transparent;
+}
+
+.sevens-slot--placed {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  border: 1px solid rgba(29, 26, 23, 0.12);
+}
+
+.spades-trick {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.spades-trick__empty {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.spades-bids {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .detail-card {
@@ -579,6 +700,7 @@ button {
   .room-header__actions,
   .waiting-stats,
   .janken-actions,
+  .spades-bids,
   .game-card__actions,
   .detail-card__actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -604,8 +726,17 @@ button {
   .room-header__actions,
   .waiting-stats,
   .janken-actions,
+  .spades-bids,
   .game-card__actions,
   .detail-card__actions {
     grid-template-columns: 1fr;
+  }
+
+  .sevens-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sevens-row__cards {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 }

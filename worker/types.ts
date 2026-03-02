@@ -6,6 +6,7 @@ import type {
   RoomSettings,
   RoomStatus
 } from "../src/shared/types";
+import type { CardSuit } from "../src/shared/cards";
 
 export interface Env {
   ASSETS: Fetcher;
@@ -74,6 +75,34 @@ export interface OldMaidState {
   lastAction: string | null;
 }
 
+export interface SevensState {
+  type: "sevens";
+  hands: string[][];
+  currentSeat: number | null;
+  winnerSeats: number[];
+  suitRanges: Record<CardSuit, { low: number; high: number }>;
+  passCounts: number[];
+  statusMessage: string;
+  lastAction: string | null;
+}
+
+export interface SpadesState {
+  type: "spades";
+  stage: "bidding" | "playing" | "finished";
+  hands: string[][];
+  currentSeat: number | null;
+  dealerSeat: number;
+  bids: Array<number | null>;
+  tricksWon: number[];
+  currentTrick: Array<{ seat: number; card: string }>;
+  completedTricks: number;
+  spadesBroken: boolean;
+  winnerSeats: number[];
+  teamScores: number[];
+  statusMessage: string;
+  lastAction: string | null;
+}
+
 export interface PlannedState {
   type: "planned";
   title: string;
@@ -85,6 +114,8 @@ export type InternalGameState =
   | PlacementState
   | Connect4State
   | OldMaidState
+  | SevensState
+  | SpadesState
   | PlannedState;
 
 export const WAITING_ROOM_TTL_MS = 15 * 60 * 1000;

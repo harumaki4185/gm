@@ -534,6 +534,12 @@ function getRoomStatusFromState(roomState: RoomRecord["gameState"]): RoomRecord[
   if (roomState.type === "old-maid" && (roomState.winnerSeats.length > 0 || roomState.hands.every((hand) => hand.length === 0))) {
     return "finished";
   }
+  if (roomState.type === "sevens" && roomState.winnerSeats.length > 0) {
+    return "finished";
+  }
+  if (roomState.type === "spades" && roomState.stage === "finished") {
+    return "finished";
+  }
   return "playing";
 }
 

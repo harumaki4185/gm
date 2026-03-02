@@ -1,3 +1,9 @@
+import {
+  createStandardDeck,
+  getCardRank,
+  shuffle,
+  sortCards
+} from "../../src/shared/cards";
 import type {
   ClientAction,
   OldMaidOpponentView,
@@ -5,14 +11,14 @@ import type {
 } from "../../src/shared/types";
 import { AppError } from "../errors";
 import type { OldMaidState, RoomRecord } from "../types";
-import { formatWinnerMessage } from "./common";
+import { formatPlayerLabel, formatWinnerMessage } from "./common";
 
 const MAX_BOT_ITERATIONS = 100;
 
 type OldMaidResolution = { kind: "resolved"; winnerSeats: number[]; loserSeat: number } | { kind: "draw" } | null;
 
 export function createOldMaidState(seatCount: number): OldMaidState {
-  const deck = shuffle(createOldMaidDeck());
+  const deck = shuffle(createStandardDeck({ includeJoker: true }));
   const hands: string[][] = Array.from({ length: seatCount }, () => []);
 
   deck.forEach((card, index) => {
@@ -100,7 +106,7 @@ export function buildOldMaidView(room: RoomRecord, state: OldMaidState, selfSeat
     winnerSeats: state.winnerSeats,
     loserSeat: state.loserSeat,
     statusMessage: state.statusMessage,
-    selfHand: [...(state.hands[selfSeat] ?? [])].sort(compareCardLabels),
+    selfHand: sortCards(state.hands[selfSeat] ?? []),
     opponents,
     lastAction: state.lastAction
   };
@@ -220,32 +226,6 @@ export function advanceOldMaidBotTurns(room: RoomRecord): void {
   }
 }
 
-function createOldMaidDeck(): string[] {
-  const suits = ["S", "H", "D", "C"];
-  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
-  const deck: string[] = [];
-
-  for (const suit of suits) {
-    for (const rank of ranks) {
-      deck.push(`${rank}${suit}`);
-    }
-  }
-
-  deck.push("JOKER");
-  return deck;
-}
-
-function shuffle<T>(items: readonly T[]): T[] {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    const current = result[index];
-    result[index] = result[swapIndex];
-    result[swapIndex] = current;
-  }
-  return result;
-}
-
 function collapsePairs(hand: string[]): number {
   const counts = new Map<string, string[]>();
   for (const card of hand) {
@@ -325,31 +305,4 @@ function getNextOldMaidTurnSeat(state: OldMaidState, seat: number): number | nul
     }
   }
   return null;
-}
-
-function formatPlayerLabel(room: RoomRecord, seat: number): string {
-  return room.players.find((player) => player.seat === seat)?.name ?? `プレイヤー ${seat + 1}`;
-}
-
-function getCardRank(card: string): string {
-  if (card === "JOKER") {
-    return "JOKER";
-  }
-  return card.slice(0, -1);
-}
-
-function compareCardLabels(left: string, right: string): number {
-  return getCardSortIndex(left) - getCardSortIndex(right);
-}
-
-function getCardSortIndex(card: string): number {
-  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "JOKER"];
-  const suits = ["S", "H", "D", "C"];
-  const rank = getCardRank(card);
-  const rankIndex = ranks.indexOf(rank);
-  if (card === "JOKER") {
-    return rankIndex * 10;
-  }
-  const suit = card.slice(-1);
-  return rankIndex * 10 + suits.indexOf(suit);
 }

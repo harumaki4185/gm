@@ -18,6 +18,18 @@ import {
   buildOldMaidView,
   createOldMaidState
 } from "./old-maid";
+import {
+  advanceSevensBotTurns,
+  applySevensAction,
+  buildSevensView,
+  createSevensState
+} from "./sevens";
+import {
+  advanceSpadesBotTurns,
+  applySpadesAction,
+  buildSpadesView,
+  createSpadesState
+} from "./spades";
 
 export function buildWaitingState(gameId: keyof typeof GAME_MAP): InternalGameState {
   return {
@@ -50,6 +62,14 @@ export function createInitialGameState(gameId: keyof typeof GAME_MAP, seatCount:
     return createOldMaidState(seatCount);
   }
 
+  if (gameId === "sevens") {
+    return createSevensState(seatCount);
+  }
+
+  if (gameId === "spades") {
+    return createSpadesState(seatCount);
+  }
+
   return {
     type: "planned",
     title: GAME_MAP[gameId].title,
@@ -69,6 +89,16 @@ export function applyGameAction(room: RoomRecord, seat: number, action: ClientAc
 
   if (room.gameState.type === "old-maid") {
     applyOldMaidAction(room, seat, action);
+    return;
+  }
+
+  if (room.gameState.type === "sevens") {
+    applySevensAction(room, seat, action);
+    return;
+  }
+
+  if (room.gameState.type === "spades") {
+    applySpadesAction(room, seat, action);
     return;
   }
 
@@ -117,6 +147,14 @@ export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
     return buildOldMaidView(room, state, selfSeat);
   }
 
+  if (state.type === "sevens") {
+    return buildSevensView(room, state, selfSeat);
+  }
+
+  if (state.type === "spades") {
+    return buildSpadesView(room, state, selfSeat);
+  }
+
   return buildBoardView(room, selfSeat);
 }
 
@@ -132,6 +170,11 @@ export function markDisconnectPending(room: RoomRecord, seat: number, disconnect
   }
 
   if (room.gameState.type === "old-maid") {
+    room.gameState.statusMessage = `${disconnectedName} の再接続を待っています。`;
+    return;
+  }
+
+  if (room.gameState.type === "sevens" || room.gameState.type === "spades") {
     room.gameState.statusMessage = `${disconnectedName} の再接続を待っています。`;
     return;
   }
@@ -159,6 +202,25 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
 
   if (room.gameState.type === "old-maid") {
     room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} がカードを引く番です`;
+    return;
+  }
+
+  if (room.gameState.type === "sevens") {
+    if (room.gameState.currentSeat === null) {
+      return;
+    }
+    room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} がカードを出す番です`;
+    return;
+  }
+
+  if (room.gameState.type === "spades") {
+    if (room.gameState.stage === "finished" || room.gameState.currentSeat === null) {
+      return;
+    }
+    room.gameState.statusMessage =
+      room.gameState.stage === "bidding"
+        ? `プレイヤー ${room.gameState.currentSeat + 1} がビッドする番です`
+        : `プレイヤー ${room.gameState.currentSeat + 1} がカードを出す番です`;
     return;
   }
 
@@ -196,6 +258,25 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
     return;
   }
 
+  if (room.gameState.type === "sevens") {
+    room.gameState.currentSeat = null;
+    room.gameState.winnerSeats = remainingSeats;
+    room.gameState.statusMessage = formatWinnerMessage(remainingSeats, "不戦勝です");
+    return;
+  }
+
+  if (room.gameState.type === "spades") {
+    const winningTeam = disconnectedSeat % 2 === 0 ? 1 : 0;
+    room.gameState.stage = "finished";
+    room.gameState.currentSeat = null;
+    room.gameState.winnerSeats = room.players
+      .filter((player) => player.team === winningTeam)
+      .map((player) => player.seat)
+      .sort((left, right) => left - right);
+    room.gameState.statusMessage = formatWinnerMessage(room.gameState.winnerSeats, "不戦勝です");
+    return;
+  }
+
   const winnerSeat = remainingSeats[0] ?? null;
   room.gameState.winnerSeat = winnerSeat;
   room.gameState.statusMessage =
@@ -203,8 +284,21 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
 }
 
 export function advanceAutomatedTurns(room: RoomRecord): void {
-  if (room.roomStatus !== "playing" || room.gameState.type !== "old-maid") {
+  if (room.roomStatus !== "playing") {
     return;
   }
-  advanceOldMaidBotTurns(room);
+
+  if (room.gameState.type === "old-maid") {
+    advanceOldMaidBotTurns(room);
+    return;
+  }
+
+  if (room.gameState.type === "sevens") {
+    advanceSevensBotTurns(room);
+    return;
+  }
+
+  if (room.gameState.type === "spades") {
+    advanceSpadesBotTurns(room);
+  }
 }

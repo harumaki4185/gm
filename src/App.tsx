@@ -91,8 +91,8 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
           <p className="eyebrow">Classic Duels</p>
           <h1>二人で始める古典ゲーム集</h1>
           <p className="hero__lead">
-            招待リンクで即開始できるオンライン対戦サイト。最初の実装ではオセロ、五目並べ、四目並べ、じゃんけんをプレイ可能にし、
-            じゃんけんやババ抜きは二人ベースを保ちながら複数人ルームにも広げています。
+            招待リンクで即開始できるオンライン対戦サイト。オセロ、五目並べ、四目並べ、じゃんけん、ババ抜き、七並べ、スペードを
+            ログインなしで遊べます。
           </p>
         </div>
         <div className="hero__panel">
@@ -368,6 +368,7 @@ function RoomPage({
                   </span>
                   <strong>
                     {player.playerType === "bot" ? "BOT" : "Human"} / {player.connected ? "Online" : "Offline"}
+                    {player.team !== null ? ` / Team ${player.team + 1}` : ""}
                   </strong>
                 </li>
               ))}
@@ -552,6 +553,8 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
           <li>四目並べ: 列を選んでディスクを落とし、縦横斜めに 4 連を作ります。</li>
           <li>じゃんけん: 2 人以上で対戦できます。勝ち手が複数人いれば同時勝利、全員ばらけたら次ラウンドです。</li>
           <li>ババ抜き: 2 人から 4 人まで対応し、bot 補充も可能です。手番では前の席の伏せ札から 1 枚引きます。</li>
+          <li>七並べ: 2 人から 4 人まで対応し、7 は自動で場に並びます。出せるカードがないときだけパスできます。</li>
+          <li>スペード: 4 席固定の 2 対 2 戦です。全員がビッドした後に 13 トリックを行い、1 ハンドの得点で勝敗を決めます。</li>
         </ul>
         <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
           一覧へ戻る

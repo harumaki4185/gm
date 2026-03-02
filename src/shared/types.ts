@@ -97,6 +97,77 @@ export interface OldMaidView {
   lastAction: string | null;
 }
 
+export interface SevensSuitRangeView {
+  suit: "S" | "H" | "D" | "C";
+  low: number;
+  high: number;
+}
+
+export interface SevensPlayerView {
+  seat: number;
+  name: string;
+  cardCount: number;
+  passCount: number;
+  isCurrent: boolean;
+  isWinner: boolean;
+}
+
+export interface SevensView {
+  kind: "sevens";
+  canAct: boolean;
+  currentSeat: number | null;
+  winnerSeats: number[];
+  statusMessage: string;
+  lastAction: string | null;
+  selfHand: string[];
+  legalCards: string[];
+  suits: SevensSuitRangeView[];
+  players: SevensPlayerView[];
+}
+
+export interface SpadesPlayerView {
+  seat: number;
+  name: string;
+  cardCount: number;
+  bid: number | null;
+  tricksWon: number;
+  team: number | null;
+  isCurrent: boolean;
+}
+
+export interface SpadesTeamView {
+  team: number;
+  bid: number;
+  tricksWon: number;
+  score: number;
+  members: number[];
+}
+
+export interface SpadesTrickCardView {
+  seat: number;
+  card: string | null;
+}
+
+export interface SpadesView {
+  kind: "spades";
+  stage: "bidding" | "playing" | "finished";
+  canBid: boolean;
+  canPlay: boolean;
+  currentSeat: number | null;
+  dealerSeat: number;
+  winnerSeats: number[];
+  statusMessage: string;
+  lastAction: string | null;
+  selfHand: string[];
+  legalCards: string[];
+  bidOptions: number[];
+  players: SpadesPlayerView[];
+  teams: SpadesTeamView[];
+  currentTrick: SpadesTrickCardView[];
+  completedTricks: number;
+  spadesBroken: boolean;
+}
+
 export interface PlacementBoardView {
   kind: "gomoku" | "othello";
   rows: number;
@@ -128,6 +199,8 @@ export type GameView =
   | PlannedView
   | JankenView
   | OldMaidView
+  | SevensView
+  | SpadesView
   | PlacementBoardView
   | Connect4View;
 
@@ -182,6 +255,17 @@ export type ClientAction =
   | {
       type: "draw_old_maid";
       targetIndex: number;
+    }
+  | {
+      type: "play_card";
+      card: string;
+    }
+  | {
+      type: "pass_sevens";
+    }
+  | {
+      type: "bid_spades";
+      bid: number;
     };
 
 export interface ActionRequest {
