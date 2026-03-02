@@ -1,4 +1,4 @@
-import { DEFAULT_ROOM_SETTINGS, GAME_MAP } from "../src/shared/games";
+import { GAME_MAP, normalizeRoomSettings } from "../src/shared/games";
 import type {
   ActionRequest,
   CreateRoomRequest,
@@ -11,6 +11,7 @@ import type {
 } from "../src/shared/types";
 import { AppError, assert } from "./errors";
 import {
+  advanceAutomatedTurns,
   applyGameAction,
   buildView,
   buildWaitingState,
@@ -26,7 +27,7 @@ import {
   FINISHED_ROOM_TTL_MS,
   WAITING_ROOM_TTL_MS
 } from "./types";
-import { getNextHumanSeat, nowIso, plusMs, sanitizePlayerName } from "./utils";
+import { getNextHumanSeat, nowIso, plusMs, resolveTeam, sanitizePlayerName } from "./utils";
 
 export class RoomDurableObject {
   private readonly storage: DurableObjectStorage;
@@ -129,6 +130,7 @@ export class RoomDurableObject {
 
     const game = GAME_MAP[body.gameId];
     assert(game, "不明なゲームです", 400);
+    const settings = normalizeRoomSettings(body.gameId, body.settings);
 
     const now = nowIso();
     const room: RoomRecord = {
@@ -137,10 +139,7 @@ export class RoomDurableObject {
       roomStatus: "waiting",
       createdAt: now,
       updatedAt: now,
-      settings: {
-        ...DEFAULT_ROOM_SETTINGS,
-        ...body.settings
-      },
+      settings,
       players: [
         {
           id: crypto.randomUUID(),
@@ -150,7 +149,7 @@ export class RoomDurableObject {
           playerType: "human",
           connected: true,
           isHost: true,
-          team: game.totalSeats > 2 ? 0 : null
+          team: resolveTeam(body.gameId, 0)
         }
       ],
       rematchVotes: [],
@@ -171,7 +170,6 @@ export class RoomDurableObject {
 
   private async handleJoin(body: JoinRoomRequest): Promise<Response> {
     const room = await this.requireRoom();
-    const game = GAME_MAP[room.gameId];
     const sessionId = body.sessionId ?? crypto.randomUUID();
     const existing = room.players.find((player) => player.sessionId === sessionId);
 
@@ -191,10 +189,12 @@ export class RoomDurableObject {
       });
     }
 
-    const humanPlayers = room.players.filter((player) => player.playerType === "human");
-    assert(humanPlayers.length < game.minHumanPlayers, "このルームは満席です", 409);
+    assert(room.roomStatus === "waiting", "このルームへの新規参加は締め切られました", 409);
 
-    const seat = getNextHumanSeat(game.id, room.players);
+    const humanPlayers = room.players.filter((player) => player.playerType === "human");
+    assert(humanPlayers.length < room.settings.seatCount, "このルームは満席です", 409);
+
+    const seat = getNextHumanSeat(room.gameId, room.players, room.settings.seatCount);
     room.players.push({
       id: crypto.randomUUID(),
       sessionId,
@@ -203,7 +203,7 @@ export class RoomDurableObject {
       playerType: "human",
       connected: true,
       isHost: false,
-      team: game.totalSeats > 2 ? seat % 2 : null
+      team: resolveTeam(room.gameId, seat)
     });
 
     maybeStartRoom(room);
@@ -247,6 +247,7 @@ export class RoomDurableObject {
     assert(room.roomStatus === "playing", "ゲームは開始していません", 409);
 
     applyGameAction(room, actor.seat, body.action);
+    advanceAutomatedTurns(room);
     if (room.roomStatus === "finished") {
       room.lifecycleAlarm = {
         kind: "cleanup",
@@ -277,8 +278,9 @@ export class RoomDurableObject {
 
     if (humanPlayerIds.every((playerId) => room.rematchVotes.includes(playerId))) {
       room.rematchVotes = [];
-      room.gameState = createInitialGameState(room.gameId);
+      room.gameState = createInitialGameState(room.gameId, room.settings.seatCount);
       room.roomStatus = getRoomStatusFromState(room.gameState);
+      advanceAutomatedTurns(room);
       room.lifecycleAlarm = null;
       if (room.roomStatus === "finished") {
         room.lifecycleAlarm = {
@@ -312,8 +314,18 @@ export class RoomDurableObject {
     this.sendSnapshot(sessionId, room);
 
     server.addEventListener("message", (event) => {
-      if (typeof event.data === "string" && event.data === "ping") {
+      if (typeof event.data !== "string" || event.data !== "ping") {
+        try {
+          server.close(1008, "invalid_message");
+        } catch {
+          this.untrackSocket(sessionId, server);
+        }
+        return;
+      }
+      try {
         server.send("pong");
+      } catch {
+        this.untrackSocket(sessionId, server);
       }
     });
 
@@ -457,6 +469,7 @@ export class RoomDurableObject {
     const self = sessionId
       ? room.players.find((player) => player.sessionId === sessionId) ?? null
       : null;
+    const players = [...room.players].sort((left, right) => left.seat - right.seat).map(stripSession);
 
     return {
       roomId: room.roomId,
@@ -464,7 +477,7 @@ export class RoomDurableObject {
       roomStatus: room.roomStatus,
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
-      players: room.players.map(stripSession),
+      players,
       selfSeat: self?.seat ?? null,
       selfPlayerId: self?.id ?? null,
       rematchVotes: room.rematchVotes
@@ -478,12 +491,14 @@ export class RoomDurableObject {
 function maybeStartRoom(room: RoomRecord): void {
   const game = GAME_MAP[room.gameId];
   const humanPlayers = room.players.filter((player) => player.playerType === "human");
-  if (humanPlayers.length < game.minHumanPlayers) {
+  const requiredHumans =
+    room.settings.fillWithBots && game.supportsBots ? game.minHumanPlayers : room.settings.seatCount;
+  if (humanPlayers.length < requiredHumans) {
     return;
   }
 
-  if (game.totalSeats > room.players.length && room.settings.fillWithBots && game.supportsBots) {
-    for (let seat = 0; seat < game.totalSeats; seat += 1) {
+  if (room.settings.seatCount > room.players.length && room.settings.fillWithBots && game.supportsBots) {
+    for (let seat = 0; seat < room.settings.seatCount; seat += 1) {
       const taken = room.players.some((player) => player.seat === seat);
       if (taken) {
         continue;
@@ -496,15 +511,16 @@ function maybeStartRoom(room: RoomRecord): void {
         playerType: "bot",
         connected: true,
         isHost: false,
-        team: game.totalSeats > 2 ? seat % 2 : null
+        team: resolveTeam(room.gameId, seat)
       });
     }
   }
 
   room.roomStatus = "playing";
   room.rematchVotes = [];
-  room.gameState = createInitialGameState(room.gameId);
+  room.gameState = createInitialGameState(room.gameId, room.settings.seatCount);
   room.roomStatus = getRoomStatusFromState(room.gameState);
+  advanceAutomatedTurns(room);
   room.lifecycleAlarm = null;
   if (room.roomStatus === "finished") {
     room.lifecycleAlarm = {
@@ -515,10 +531,7 @@ function maybeStartRoom(room: RoomRecord): void {
 }
 
 function getRoomStatusFromState(roomState: RoomRecord["gameState"]): RoomRecord["roomStatus"] {
-  if (
-    roomState.type === "old-maid" &&
-    (roomState.winnerSeat !== null || roomState.hands.every((hand) => hand.length === 0))
-  ) {
+  if (roomState.type === "old-maid" && (roomState.winnerSeats.length > 0 || roomState.hands.every((hand) => hand.length === 0))) {
     return "finished";
   }
   return "playing";

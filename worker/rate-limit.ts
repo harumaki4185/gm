@@ -6,7 +6,7 @@ interface RateLimitBucket {
   resetAt: number;
 }
 
-const ROOM_CREATE_BUCKET_KEY = "bucket:create_room";
+const BUCKET_PREFIX = "bucket:";
 
 export class RateLimiterDurableObject {
   constructor(private readonly state: DurableObjectState) {}
@@ -23,7 +23,7 @@ export class RateLimiterDurableObject {
       windowMs: number;
     };
     const now = Date.now();
-    const bucketKey = `bucket:${key}`;
+    const bucketKey = `${BUCKET_PREFIX}${key}`;
     const current = await this.state.storage.get<RateLimitBucket>(bucketKey);
 
     let next: RateLimitBucket;
@@ -50,7 +50,24 @@ export class RateLimiterDurableObject {
   }
 
   async alarm(): Promise<void> {
-    await this.state.storage.delete(ROOM_CREATE_BUCKET_KEY);
+    const now = Date.now();
+    const buckets = await this.state.storage.list<RateLimitBucket>({ prefix: BUCKET_PREFIX });
+    let nextAlarmAt: number | null = null;
+
+    for (const [bucketKey, bucket] of buckets) {
+      if (bucket.resetAt <= now) {
+        await this.state.storage.delete(bucketKey);
+        continue;
+      }
+      nextAlarmAt = nextAlarmAt === null ? bucket.resetAt : Math.min(nextAlarmAt, bucket.resetAt);
+    }
+
+    if (nextAlarmAt === null) {
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+
+    await this.state.storage.setAlarm(nextAlarmAt);
   }
 }
 

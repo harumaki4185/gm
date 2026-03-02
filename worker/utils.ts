@@ -1,4 +1,3 @@
-import { GAME_MAP } from "../src/shared/games";
 import type { GameId } from "../src/shared/types";
 import { AppError } from "./errors";
 import type { StoredParticipant } from "./types";
@@ -27,7 +26,7 @@ export function makeRoomId(): string {
   return crypto.randomUUID().replace(/-/g, "");
 }
 
-export function getNextHumanSeat(gameId: GameId, players: StoredParticipant[]): number {
+export function getNextHumanSeat(gameId: GameId, players: StoredParticipant[], seatCount: number): number {
   if (gameId === "spades") {
     const preferredSeats = [0, 2];
     for (const seat of preferredSeats) {
@@ -37,13 +36,20 @@ export function getNextHumanSeat(gameId: GameId, players: StoredParticipant[]): 
     }
   }
 
-  for (let seat = 0; seat < GAME_MAP[gameId].totalSeats; seat += 1) {
+  for (let seat = 0; seat < seatCount; seat += 1) {
     if (!players.some((player) => player.seat === seat)) {
       return seat;
     }
   }
 
   throw new AppError("空席がありません", 409);
+}
+
+export function resolveTeam(gameId: GameId, seat: number): number | null {
+  if (gameId === "spades") {
+    return seat % 2;
+  }
+  return null;
 }
 
 export function nowIso(): string {

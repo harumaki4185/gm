@@ -23,7 +23,7 @@ export function GameCard({ game, busy, onCreate, onOpenDetails }: GameCardProps)
       <dl className="game-card__meta">
         <div>
           <dt>人数</dt>
-          <dd>{game.totalSeats} 席</dd>
+          <dd>{formatSeatRange(game)}</dd>
         </div>
         <div>
           <dt>人間必要数</dt>
@@ -31,7 +31,7 @@ export function GameCard({ game, busy, onCreate, onOpenDetails }: GameCardProps)
         </div>
         <div>
           <dt>bot</dt>
-          <dd>{game.supportsBots ? "対応予定" : "不要"}</dd>
+          <dd>{game.supportsBots ? "対応" : "不要"}</dd>
         </div>
       </dl>
       <div className="game-card__actions">
@@ -48,4 +48,11 @@ export function GameCard({ game, busy, onCreate, onOpenDetails }: GameCardProps)
       </div>
     </article>
   );
+}
+
+function formatSeatRange(game: GameCatalogEntry): string {
+  if (game.minSeats === game.maxSeats) {
+    return `${game.maxSeats} 人`;
+  }
+  return `${game.minSeats}-${game.maxSeats} 人`;
 }

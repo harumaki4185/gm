@@ -41,7 +41,7 @@ export interface JankenState {
   phase: "playing" | "finished";
   round: number;
   selections: Array<JankenChoice | null>;
-  winnerSeat: number | null;
+  winnerSeats: number[];
   resultMessage: string | null;
 }
 
@@ -68,7 +68,7 @@ export interface OldMaidState {
   type: "old-maid";
   hands: string[][];
   currentSeat: number;
-  winnerSeat: number | null;
+  winnerSeats: number[];
   loserSeat: number | null;
   statusMessage: string;
   lastAction: string | null;

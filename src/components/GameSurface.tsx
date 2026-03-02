@@ -44,13 +44,17 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
   }
 
   if (view.kind === "janken") {
+    const jankenColumns = Math.min(Math.max(snapshot.players.length, 2), 3);
     return (
       <section className="surface-card">
         <h2>じゃんけん</h2>
         <p className="surface-status">{view.resultMessage ?? "手を選んでください"}</p>
-        <div className="janken-slots">
+        <div className="janken-slots" style={{ gridTemplateColumns: `repeat(${jankenColumns}, minmax(0, 1fr))` }}>
           {snapshot.players.map((player, index) => (
-            <div className="janken-slot" key={player.id}>
+            <div
+              className={`janken-slot ${view.winnerSeats.includes(player.seat) ? "janken-slot--winner" : ""}`}
+              key={player.id}
+            >
               <span>{player.name}</span>
               <strong>{formatJankenSelection(view.selections[index])}</strong>
             </div>
@@ -79,21 +83,34 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
         <p className="surface-status">{view.statusMessage}</p>
         {view.lastAction ? <p className="surface-status">{view.lastAction}</p> : null}
         <div className="old-maid-layout">
-          <div className="old-maid-panel">
-            <span>相手の手札</span>
-            <strong>{view.opponentCardCount} 枚</strong>
-            <div className="old-maid-targets">
-              {view.targetableOpponentSlots.map((slot) => (
-                <button
-                  className="old-maid-card old-maid-card--hidden"
-                  disabled={!view.canAct}
-                  key={slot}
-                  onClick={() => onAction({ type: "draw_old_maid", targetIndex: slot })}
-                >
-                  ?
-                </button>
-              ))}
-            </div>
+          <div className="old-maid-opponents">
+            {view.opponents.map((opponent) => (
+              <div
+                className={`old-maid-panel ${opponent.isCurrentTarget ? "old-maid-panel--target" : ""}`}
+                key={opponent.seat}
+              >
+                <div className="old-maid-panel__meta">
+                  <span>{opponent.name}</span>
+                  <strong>{opponent.cardCount} 枚</strong>
+                </div>
+                {opponent.hasFinished ? <p className="surface-status">あがり</p> : null}
+                {opponent.isCurrentTarget ? (
+                  <p className="surface-status">この相手から 1 枚引きます</p>
+                ) : null}
+                <div className="old-maid-targets">
+                  {opponent.targetableSlots.map((slot) => (
+                    <button
+                      className="old-maid-card old-maid-card--hidden"
+                      disabled={!view.canAct}
+                      key={slot}
+                      onClick={() => onAction({ type: "draw_old_maid", targetIndex: slot })}
+                    >
+                      ?
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
           <div className="old-maid-panel">
             <span>自分の手札</span>

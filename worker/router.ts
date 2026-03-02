@@ -61,6 +61,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       if (!sessionId) {
         return apiError("sessionId が必要です", 400);
       }
+      if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+        return apiError("WebSocket 接続が必要です", 400);
+      }
+      if (!isAllowedWebSocketOrigin(request)) {
+        return apiError("不正な接続元です", 403);
+      }
       return stub.fetch(`https://room.internal/ws?sessionId=${encodeURIComponent(sessionId)}`, request);
     }
 
@@ -89,4 +95,22 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
 function getRoomStub(env: Env, roomId: string): DurableObjectStub {
   return env.ROOMS.get(env.ROOMS.idFromName(roomId));
+}
+
+function isAllowedWebSocketOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    return true;
+  }
+
+  try {
+    const originUrl = new URL(origin);
+    const requestUrl = new URL(request.url);
+    return (
+      (originUrl.protocol === "http:" || originUrl.protocol === "https:") &&
+      originUrl.host === requestUrl.host
+    );
+  } catch {
+    return false;
+  }
 }

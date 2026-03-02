@@ -31,6 +31,7 @@ export function toErrorResponse(error: unknown): Response {
   if (error instanceof AppError) {
     return apiError(error.message, error.status);
   }
+  console.error("Unexpected worker error", error);
   if (error instanceof Error) {
     return apiError(error.message, 500);
   }

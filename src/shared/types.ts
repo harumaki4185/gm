@@ -21,7 +21,9 @@ export interface GameCatalogEntry {
   description: string;
   category: "board" | "card" | "party";
   availability: Availability;
-  totalSeats: number;
+  defaultSeats: number;
+  minSeats: number;
+  maxSeats: number;
   minHumanPlayers: number;
   supportsBots: boolean;
   accent: string;
@@ -29,6 +31,7 @@ export interface GameCatalogEntry {
 
 export interface RoomSettings {
   fillWithBots: boolean;
+  seatCount: number;
 }
 
 export interface ParticipantSummary {
@@ -70,19 +73,27 @@ export interface JankenView {
   selections: Array<JankenChoice | "hidden" | null>;
   resultMessage: string | null;
   currentSeat: number | null;
-  winnerSeat: number | null;
+  winnerSeats: number[];
+}
+
+export interface OldMaidOpponentView {
+  seat: number;
+  name: string;
+  cardCount: number;
+  isCurrentTarget: boolean;
+  hasFinished: boolean;
+  targetableSlots: number[];
 }
 
 export interface OldMaidView {
   kind: "old-maid";
   canAct: boolean;
   currentSeat: number | null;
-  winnerSeat: number | null;
+  winnerSeats: number[];
   loserSeat: number | null;
   statusMessage: string;
   selfHand: string[];
-  opponentCardCount: number;
-  targetableOpponentSlots: number[];
+  opponents: OldMaidOpponentView[];
   lastAction: string | null;
 }
 

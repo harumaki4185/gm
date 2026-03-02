@@ -4,6 +4,7 @@ import type {
   ClientAction,
   GameView,
   JankenChoice,
+  OldMaidOpponentView,
   OldMaidView
 } from "../src/shared/types";
 import { AppError } from "./errors";
@@ -16,15 +17,19 @@ import type {
   RoomRecord
 } from "./types";
 
+const CONNECT4_WIN_LENGTH = 4;
+const GOMOKU_WIN_LENGTH = 5;
+const MAX_BOT_ITERATIONS = 100;
+
 export function buildWaitingState(gameId: keyof typeof GAME_MAP): InternalGameState {
   return {
     type: "planned",
     title: GAME_MAP[gameId].title,
-    message: "対戦相手の参加を待っています。"
+    message: "参加プレイヤーを待っています。"
   };
 }
 
-export function createInitialGameState(gameId: keyof typeof GAME_MAP): InternalGameState {
+export function createInitialGameState(gameId: keyof typeof GAME_MAP, seatCount: number): InternalGameState {
   const startingSeat = Math.random() >= 0.5 ? 1 : 0;
 
   if (gameId === "janken") {
@@ -32,8 +37,8 @@ export function createInitialGameState(gameId: keyof typeof GAME_MAP): InternalG
       type: "janken",
       phase: "playing",
       round: 1,
-      selections: [null, null],
-      winnerSeat: null,
+      selections: Array.from({ length: seatCount }, () => null),
+      winnerSeats: [],
       resultMessage: "手を選んでください"
     };
   }
@@ -80,7 +85,7 @@ export function createInitialGameState(gameId: keyof typeof GAME_MAP): InternalG
   }
 
   if (gameId === "old-maid") {
-    return createOldMaidState();
+    return createOldMaidState(seatCount);
   }
 
   return {
@@ -118,14 +123,16 @@ export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
   const connectedHumans = room.players.filter(
     (player) => player.playerType === "human" && player.connected
   ).length;
+  const requiredHumans =
+    room.settings.fillWithBots && game.supportsBots ? game.minHumanPlayers : room.settings.seatCount;
 
   if (room.roomStatus === "waiting") {
     return {
       kind: "waiting",
-      message: "対戦相手の参加を待っています。",
-      requiredHumans: game.minHumanPlayers,
+      message: "参加プレイヤーを待っています。",
+      requiredHumans,
       connectedHumans,
-      totalSeats: game.totalSeats,
+      totalSeats: room.settings.seatCount,
       supportsBots: game.supportsBots
     };
   }
@@ -204,7 +211,7 @@ export function markDisconnectPending(room: RoomRecord, seat: number, disconnect
 export function resumeGameAfterReconnect(room: RoomRecord): void {
   if (room.gameState.type === "planned") {
     room.gameState.message =
-      room.roomStatus === "waiting" ? "対戦相手の参加を待っています。" : room.gameState.message;
+      room.roomStatus === "waiting" ? "参加プレイヤーを待っています。" : room.gameState.message;
     return;
   }
 
@@ -231,6 +238,10 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
 
 export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number): void {
   room.roomStatus = "finished";
+  const remainingSeats = room.players
+    .filter((player) => player.seat !== disconnectedSeat)
+    .map((player) => player.seat)
+    .sort((left, right) => left - right);
 
   if (room.gameState.type === "planned") {
     room.gameState.message = "対戦相手の切断によりルームを終了しました。";
@@ -239,15 +250,15 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
 
   if (room.gameState.type === "janken") {
     room.gameState.phase = "finished";
-    room.gameState.winnerSeat = disconnectedSeat === 0 ? 1 : 0;
-    room.gameState.resultMessage = `プレイヤー ${room.gameState.winnerSeat + 1} の不戦勝です`;
+    room.gameState.winnerSeats = remainingSeats;
+    room.gameState.resultMessage = formatWinnerMessage(remainingSeats, "不戦勝です");
     return;
   }
 
   if (room.gameState.type === "old-maid") {
-    room.gameState.winnerSeat = disconnectedSeat === 0 ? 1 : 0;
+    room.gameState.winnerSeats = remainingSeats;
     room.gameState.loserSeat = disconnectedSeat;
-    room.gameState.statusMessage = `プレイヤー ${room.gameState.winnerSeat + 1} の不戦勝です`;
+    room.gameState.statusMessage = formatWinnerMessage(remainingSeats, "不戦勝です");
     return;
   }
 
@@ -276,49 +287,64 @@ function buildJankenView(room: RoomRecord, state: JankenState, selfSeat: number 
     canAct:
       room.roomStatus === "playing" &&
       selfSeat !== null &&
-      selfSeat <= 1 &&
+      selfSeat < state.selections.length &&
       state.selections[selfSeat] === null,
     choices: ["rock", "paper", "scissors"],
     selections,
     resultMessage: state.resultMessage,
     currentSeat: null,
-    winnerSeat: state.winnerSeat
+    winnerSeats: state.winnerSeats
   };
 }
 
 function buildOldMaidView(room: RoomRecord, state: OldMaidState, selfSeat: number | null): OldMaidView {
+  const sourceSeat =
+    selfSeat !== null && room.roomStatus === "playing" && selfSeat === state.currentSeat
+      ? getOldMaidSourceSeat(state, selfSeat)
+      : null;
+  const opponents: OldMaidOpponentView[] = room.players
+    .filter((player) => player.seat !== selfSeat)
+    .sort((left, right) => left.seat - right.seat)
+    .map((player) => {
+      const hand = state.hands[player.seat] ?? [];
+      const isCurrentTarget = sourceSeat === player.seat;
+      return {
+        seat: player.seat,
+        name: player.name,
+        cardCount: hand.length,
+        isCurrentTarget,
+        hasFinished: hand.length === 0,
+        targetableSlots: isCurrentTarget ? shuffle(Array.from({ length: hand.length }, (_, index) => index)) : []
+      };
+    });
+
   if (selfSeat === null) {
     return {
       kind: "old-maid",
       canAct: false,
       currentSeat: state.currentSeat,
-      winnerSeat: state.winnerSeat,
+      winnerSeats: state.winnerSeats,
       loserSeat: state.loserSeat,
       statusMessage: state.statusMessage,
       selfHand: [],
-      opponentCardCount: 0,
-      targetableOpponentSlots: [],
+      opponents,
       lastAction: state.lastAction
     };
   }
 
-  const seat = selfSeat;
-  const opponentSeat = seat === 0 ? 1 : 0;
-  const opponentHand = state.hands[opponentSeat] ?? [];
-  const targetableOpponentSlots = shuffle(
-    opponentHand.map((_, index) => index.toString())
-  ).map((value) => Number(value));
-
   return {
     kind: "old-maid",
-    canAct: room.roomStatus === "playing" && selfSeat === state.currentSeat && opponentHand.length > 0,
+    canAct:
+      room.roomStatus === "playing" &&
+      selfSeat === state.currentSeat &&
+      sourceSeat !== null &&
+      (state.hands[sourceSeat]?.length ?? 0) > 0,
     currentSeat: state.currentSeat,
-    winnerSeat: state.winnerSeat,
+    winnerSeats: state.winnerSeats,
     loserSeat: state.loserSeat,
     statusMessage: state.statusMessage,
-    selfHand: [...(state.hands[seat] ?? [])].sort(compareCardLabels),
-    opponentCardCount: opponentHand.length,
-    targetableOpponentSlots,
+    selfHand: [...(state.hands[selfSeat] ?? [])].sort(compareCardLabels),
+    opponents,
     lastAction: state.lastAction
   };
 }
@@ -331,7 +357,7 @@ function applyJankenAction(room: RoomRecord, seat: number, action: ClientAction)
   if (action.type !== "choose_rps") {
     throw new AppError("この操作はじゃんけんでは無効です", 400);
   }
-  if (seat > 1) {
+  if (seat < 0 || seat >= state.selections.length) {
     throw new AppError("人間プレイヤーの席が不正です", 400);
   }
   if (state.phase !== "playing") {
@@ -344,24 +370,22 @@ function applyJankenAction(room: RoomRecord, seat: number, action: ClientAction)
   state.selections[seat] = action.choice;
 
   if (state.selections.some((choice) => choice === null)) {
-    state.resultMessage = "相手の入力を待っています";
+    state.resultMessage = "他のプレイヤーの入力を待っています";
     return;
   }
 
-  const [first, second] = state.selections as [JankenChoice, JankenChoice];
-  const result = resolveJanken(first, second);
-
-  if (result === null) {
+  const winnerSeats = resolveJanken(state.selections as JankenChoice[]);
+  if (winnerSeats.length === 0) {
     state.round += 1;
-    state.selections = [null, null];
-    state.winnerSeat = null;
+    state.selections = Array.from({ length: state.selections.length }, () => null);
+    state.winnerSeats = [];
     state.resultMessage = `あいこです。Round ${state.round} を始めます`;
     return;
   }
 
   state.phase = "finished";
-  state.winnerSeat = result;
-  state.resultMessage = `プレイヤー ${result + 1} の勝ちです`;
+  state.winnerSeats = winnerSeats;
+  state.resultMessage = formatWinnerMessage(winnerSeats, "勝ちです");
   room.roomStatus = "finished";
 }
 
@@ -377,39 +401,55 @@ function applyOldMaidAction(room: RoomRecord, seat: number, action: ClientAction
     throw new AppError("あなたの手番ではありません", 403);
   }
 
-  const opponentSeat = seat === 0 ? 1 : 0;
-  const opponentHand = state.hands[opponentSeat] ?? [];
-  if (action.targetIndex < 0 || action.targetIndex >= opponentHand.length) {
+  const sourceSeat = getOldMaidSourceSeat(state, seat);
+  if (sourceSeat === null) {
+    throw new AppError("引ける相手がいません", 409);
+  }
+
+  const sourceHand = state.hands[sourceSeat] ?? [];
+  if (action.targetIndex < 0 || action.targetIndex >= sourceHand.length) {
     throw new AppError("そのカードは引けません", 409);
   }
 
-  const [drawnCard] = opponentHand.splice(action.targetIndex, 1);
+  const drawnCard = sourceHand.splice(action.targetIndex, 1)[0];
+  if (!drawnCard) {
+    throw new AppError("そのカードは引けません", 409);
+  }
   state.hands[seat].push(drawnCard);
   const removedPairs = collapsePairs(state.hands[seat]);
-  const actorName = `プレイヤー ${seat + 1}`;
-  const opponentName = `プレイヤー ${opponentSeat + 1}`;
+  const actorName = formatPlayerLabel(room, seat);
+  const opponentName = formatPlayerLabel(room, sourceSeat);
   state.lastAction =
     removedPairs > 0
       ? `${actorName} が ${opponentName} から 1 枚引き、${removedPairs} 組のペアを捨てました`
       : `${actorName} が ${opponentName} から 1 枚引きました`;
 
-  const winner = resolveOldMaidWinner(state);
-  if (winner !== null) {
+  const result = resolveOldMaidWinner(state);
+  if (result !== null) {
     room.roomStatus = "finished";
-    if (winner === -1) {
-      state.winnerSeat = null;
+    if (result.kind === "draw") {
+      state.winnerSeats = [];
       state.loserSeat = null;
       state.statusMessage = "引き分けです";
       return;
     }
-    state.winnerSeat = winner;
-    state.loserSeat = winner === 0 ? 1 : 0;
-    state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
+    state.winnerSeats = result.winnerSeats;
+    state.loserSeat = result.loserSeat;
+    state.statusMessage = formatWinnerMessage(result.winnerSeats, "勝ちです");
     return;
   }
 
-  state.currentSeat = opponentSeat;
-  state.statusMessage = `プレイヤー ${opponentSeat + 1} がカードを引く番です`;
+  const nextSeat = getNextOldMaidTurnSeat(state, seat);
+  if (nextSeat === null) {
+    room.roomStatus = "finished";
+    state.winnerSeats = [];
+    state.loserSeat = null;
+    state.statusMessage = "引き分けです";
+    return;
+  }
+
+  state.currentSeat = nextSeat;
+  state.statusMessage = `プレイヤー ${nextSeat + 1} がカードを引く番です`;
 }
 
 function applyConnect4Action(room: RoomRecord, seat: number, action: ClientAction): void {
@@ -430,7 +470,7 @@ function applyConnect4Action(room: RoomRecord, seat: number, action: ClientActio
   }
 
   state.board[row][action.col] = seat;
-  const winningLine = findWinningLine(state.board, row, action.col, seat, 4);
+  const winningLine = findWinningLine(state.board, row, action.col, seat, CONNECT4_WIN_LENGTH);
   if (winningLine.length > 0) {
     state.winnerSeat = seat;
     state.winningLine = winningLine;
@@ -466,7 +506,7 @@ function applyPlacementAction(room: RoomRecord, seat: number, action: ClientActi
 
   if (state.type === "gomoku") {
     state.board[action.row][action.col] = seat;
-    const winningLine = findWinningLine(state.board, action.row, action.col, seat, 5);
+    const winningLine = findWinningLine(state.board, action.row, action.col, seat, GOMOKU_WIN_LENGTH);
     if (winningLine.length > 0) {
       state.winnerSeat = seat;
       state.winningLine = winningLine;
@@ -522,52 +562,123 @@ function applyPlacementAction(room: RoomRecord, seat: number, action: ClientActi
   room.roomStatus = "finished";
 }
 
-function resolveJanken(first: JankenChoice, second: JankenChoice): number | null {
-  if (first === second) {
-    return null;
+export function advanceAutomatedTurns(room: RoomRecord): void {
+  if (room.roomStatus !== "playing") {
+    return;
   }
+
+  if (room.gameState.type !== "old-maid") {
+    return;
+  }
+
+  let iterations = 0;
+  while (room.roomStatus === "playing") {
+    iterations += 1;
+    if (iterations > MAX_BOT_ITERATIONS) {
+      room.roomStatus = "finished";
+      room.gameState.winnerSeats = [];
+      room.gameState.loserSeat = null;
+      room.gameState.statusMessage = "bot の自動進行が上限に達したため終了しました";
+      return;
+    }
+
+    const currentSeat = room.gameState.currentSeat;
+    const currentPlayer = room.players.find((player) => player.seat === currentSeat);
+    if (!currentPlayer || currentPlayer.playerType !== "bot") {
+      return;
+    }
+
+    const sourceSeat = getOldMaidSourceSeat(room.gameState, currentSeat);
+    if (sourceSeat === null) {
+      const result = resolveOldMaidWinner(room.gameState);
+      if (result?.kind === "resolved") {
+        room.gameState.winnerSeats = result.winnerSeats;
+        room.gameState.loserSeat = result.loserSeat;
+        room.gameState.statusMessage = formatWinnerMessage(result.winnerSeats, "勝ちです");
+        room.roomStatus = "finished";
+      } else if (result?.kind === "draw") {
+        room.gameState.winnerSeats = [];
+        room.gameState.loserSeat = null;
+        room.gameState.statusMessage = "引き分けです";
+        room.roomStatus = "finished";
+      }
+      return;
+    }
+
+    const sourceHand = room.gameState.hands[sourceSeat] ?? [];
+    if (sourceHand.length === 0) {
+      return;
+    }
+
+    applyOldMaidAction(room, currentSeat, {
+      type: "draw_old_maid",
+      targetIndex: Math.floor(Math.random() * sourceHand.length)
+    });
+  }
+}
+
+function resolveJanken(selections: JankenChoice[]): number[] {
+  const presentChoices = new Set(selections);
+  if (presentChoices.size !== 2) {
+    return [];
+  }
+
+  const [first, second] = [...presentChoices] as [JankenChoice, JankenChoice];
+  const winningChoice = resolveWinningChoice(first, second);
+  return selections
+    .map((choice, seat) => ({ choice, seat }))
+    .filter((entry) => entry.choice === winningChoice)
+    .map((entry) => entry.seat);
+}
+
+function resolveWinningChoice(first: JankenChoice, second: JankenChoice): JankenChoice {
   if (
     (first === "rock" && second === "scissors") ||
     (first === "scissors" && second === "paper") ||
     (first === "paper" && second === "rock")
   ) {
-    return 0;
+    return first;
   }
-  return 1;
+  return second;
 }
 
-function createOldMaidState(): OldMaidState {
+function createOldMaidState(seatCount: number): OldMaidState {
   const deck = shuffle(createOldMaidDeck());
-  const hands: string[][] = [[], []];
+  const hands: string[][] = Array.from({ length: seatCount }, () => []);
 
   deck.forEach((card, index) => {
-    hands[index % 2].push(card);
+    hands[index % seatCount].push(card);
   });
 
-  collapsePairs(hands[0]);
-  collapsePairs(hands[1]);
+  for (const hand of hands) {
+    collapsePairs(hand);
+  }
 
-  const startingSeat = Math.random() >= 0.5 ? 1 : 0;
+  const activeSeats = hands
+    .map((hand, seat) => ({ hand, seat }))
+    .filter((entry) => entry.hand.length > 0)
+    .map((entry) => entry.seat);
+  const startingSeat = activeSeats[Math.floor(Math.random() * activeSeats.length)] ?? 0;
   const state: OldMaidState = {
     type: "old-maid",
     hands,
     currentSeat: startingSeat,
-    winnerSeat: null,
+    winnerSeats: [],
     loserSeat: null,
     statusMessage: `プレイヤー ${startingSeat + 1} がカードを引く番です`,
     lastAction: "配札を行いました"
   };
 
-  const winner = resolveOldMaidWinner(state);
-  if (winner !== null) {
-    if (winner === -1) {
-      state.winnerSeat = null;
+  const result = resolveOldMaidWinner(state);
+  if (result !== null) {
+    if (result.kind === "draw") {
+      state.winnerSeats = [];
       state.loserSeat = null;
       state.statusMessage = "引き分けです";
     } else {
-      state.winnerSeat = winner;
-      state.loserSeat = winner === 0 ? 1 : 0;
-      state.statusMessage = `プレイヤー ${winner + 1} の勝ちです`;
+      state.winnerSeats = result.winnerSeats;
+      state.loserSeat = result.loserSeat;
+      state.statusMessage = formatWinnerMessage(result.winnerSeats, "勝ちです");
     }
   }
 
@@ -593,8 +704,8 @@ function createOldMaidDeck(): string[] {
   return deck;
 }
 
-function shuffle(cards: string[]): string[] {
-  const result = [...cards];
+function shuffle<T>(items: readonly T[]): T[] {
+  const result = [...items];
   for (let index = result.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
     const current = result[index];
@@ -635,19 +746,69 @@ function collapsePairs(hand: string[]): number {
   return removedPairs;
 }
 
-function resolveOldMaidWinner(state: OldMaidState): number | -1 | null {
-  if (state.hands[0].length === 0 && state.hands[1].length === 0) {
+function resolveOldMaidWinner(
+  state: OldMaidState
+): { kind: "resolved"; winnerSeats: number[]; loserSeat: number } | { kind: "draw" } | null {
+  const activeSeats = getActiveOldMaidSeats(state);
+  if (activeSeats.length === 0) {
     state.statusMessage = "引き分けです";
     state.loserSeat = null;
-    return -1;
+    return { kind: "draw" };
   }
-  if (state.hands[0].length === 0 && state.hands[1].length > 0) {
-    return 0;
-  }
-  if (state.hands[1].length === 0 && state.hands[0].length > 0) {
-    return 1;
+  if (activeSeats.length === 1) {
+    const loserSeat = activeSeats[0];
+    return {
+      kind: "resolved",
+      loserSeat,
+      winnerSeats: state.hands
+        .map((_, seat) => seat)
+        .filter((seat) => seat !== loserSeat)
+    };
   }
   return null;
+}
+
+function getActiveOldMaidSeats(state: OldMaidState): number[] {
+  return state.hands
+    .map((hand, seat) => ({ hand, seat }))
+    .filter((entry) => entry.hand.length > 0)
+    .map((entry) => entry.seat);
+}
+
+function getOldMaidSourceSeat(state: OldMaidState, seat: number): number | null {
+  if ((state.hands[seat]?.length ?? 0) === 0) {
+    return null;
+  }
+  for (let offset = 1; offset < state.hands.length; offset += 1) {
+    const candidate = (seat - offset + state.hands.length) % state.hands.length;
+    if ((state.hands[candidate]?.length ?? 0) > 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getNextOldMaidTurnSeat(state: OldMaidState, seat: number): number | null {
+  for (let offset = 1; offset < state.hands.length; offset += 1) {
+    const candidate = (seat + offset) % state.hands.length;
+    if ((state.hands[candidate]?.length ?? 0) > 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function formatPlayerLabel(room: RoomRecord, seat: number): string {
+  return room.players.find((player) => player.seat === seat)?.name ?? `プレイヤー ${seat + 1}`;
+}
+
+function formatWinnerMessage(winnerSeats: number[], suffix: string): string {
+  if (winnerSeats.length === 0) {
+    return "引き分けです";
+  }
+
+  const winners = winnerSeats.map((seat) => `プレイヤー ${seat + 1}`).join(" / ");
+  return `${winners} の${suffix}`;
 }
 
 function getCardRank(card: string): string {

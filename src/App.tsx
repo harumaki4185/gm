@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { GameCard } from "./components/GameCard";
 import { GameSurface } from "./components/GameSurface";
 import { parseRoute, toPath, type Route } from "./router";
-import { GAME_CATALOG, GAME_MAP } from "./shared/games";
+import {
+  GAME_CATALOG,
+  GAME_MAP,
+  getDefaultRoomSettings,
+  supportsVariableSeats
+} from "./shared/games";
 import type {
   ActionRequest,
   ApiErrorBody,
@@ -12,6 +17,7 @@ import type {
   JoinRoomRequest,
   ReconnectRoomRequest,
   RematchRequest,
+  RoomSettings,
   RoomMutationResponse,
   RoomSnapshot
 } from "./shared/types";
@@ -64,7 +70,7 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
     setError(null);
 
     try {
-      const payload = await createRoomOnServer(gameId, playerName);
+      const payload = await createRoomOnServer(gameId, playerName, getDefaultRoomSettings(gameId));
       navigate({ kind: "room", roomId: payload.snapshot.roomId });
     } catch (requestError) {
       setError(getMessage(requestError));
@@ -81,7 +87,7 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
           <h1>二人で始める古典ゲーム集</h1>
           <p className="hero__lead">
             招待リンクで即開始できるオンライン対戦サイト。最初の実装ではオセロ、五目並べ、四目並べ、じゃんけんをプレイ可能にし、
-            トランプゲーム群は同じプロジェクト内で段階追加していきます。
+            じゃんけんやババ抜きは二人ベースを保ちながら複数人ルームにも広げています。
           </p>
         </div>
         <div className="hero__panel">
@@ -373,21 +379,33 @@ function RoomPage({
 
         <section className="room-main">
           {!sessionId ? (
-            <div className="join-card">
-              <h2>このルームに参加する</h2>
-              <label className="field">
-                <span>表示名</span>
-                <input
-                  maxLength={20}
-                  onChange={(event) => setJoinName(event.target.value)}
-                  placeholder="例: Player Two"
-                  value={joinName}
-                />
-              </label>
-              <button className="primary-button" disabled={busy} onClick={() => void joinRoom()}>
-                参加する
-              </button>
-            </div>
+            !snapshot ? (
+              <div className="join-card">
+                <h2>ルームを確認中</h2>
+                <p>参加可能かどうかを確認しています。</p>
+              </div>
+            ) : snapshot.roomStatus === "waiting" ? (
+              <div className="join-card">
+                <h2>このルームに参加する</h2>
+                <label className="field">
+                  <span>表示名</span>
+                  <input
+                    maxLength={20}
+                    onChange={(event) => setJoinName(event.target.value)}
+                    placeholder="例: Player Two"
+                    value={joinName}
+                  />
+                </label>
+                <button className="primary-button" disabled={busy} onClick={() => void joinRoom()}>
+                  参加する
+                </button>
+              </div>
+            ) : (
+              <div className="join-card">
+                <h2>新規参加は締め切られました</h2>
+                <p>このルームはすでに開始済みです。参加済みブラウザからのみ再接続できます。</p>
+              </div>
+            )
           ) : snapshot ? (
             <GameSurface onAction={sendAction} snapshot={snapshot} />
           ) : (
@@ -410,7 +428,10 @@ function GameDetailPage({
   navigate: (route: Route) => void;
 }) {
   const game = GAME_MAP[gameId];
+  const defaultSettings = getDefaultRoomSettings(gameId);
   const [playerName, setPlayerName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
+  const [seatCount, setSeatCount] = useState(defaultSettings.seatCount);
+  const [fillWithBots, setFillWithBots] = useState(defaultSettings.fillWithBots);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!game) {
@@ -430,7 +451,10 @@ function GameDetailPage({
     setPending(true);
     setError(null);
     try {
-      const payload = await createRoomOnServer(gameId, playerName);
+      const payload = await createRoomOnServer(gameId, playerName, {
+        seatCount,
+        fillWithBots
+      });
       navigate({ kind: "room", roomId: payload.snapshot.roomId });
     } catch (requestError) {
       setError(getMessage(requestError));
@@ -451,8 +475,8 @@ function GameDetailPage({
             <dd>{game.availability === "active" ? "プレイ可能" : "実装予定"}</dd>
           </div>
           <div>
-            <dt>総席数</dt>
-            <dd>{game.totalSeats}</dd>
+            <dt>対応人数</dt>
+            <dd>{formatSeatRange(gameId)}</dd>
           </div>
           <div>
             <dt>bot</dt>
@@ -468,6 +492,27 @@ function GameDetailPage({
             value={playerName}
           />
         </label>
+        {supportsVariableSeats(gameId) ? (
+          <label className="field">
+            <span>ルーム人数</span>
+            <select onChange={(event) => setSeatCount(Number(event.target.value))} value={seatCount}>
+              {Array.from({ length: game.maxSeats - game.minSeats + 1 }, (_, index) => {
+                const value = game.minSeats + index;
+                return (
+                  <option key={value} value={value}>
+                    {value} 人
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        ) : null}
+        {game.supportsBots ? (
+          <label className="checkbox-field">
+            <input checked={fillWithBots} onChange={(event) => setFillWithBots(event.target.checked)} type="checkbox" />
+            <span>不足席を bot で補充して開始する</span>
+          </label>
+        ) : null}
         {error ? <p className="inline-error">{error}</p> : null}
         <div className="detail-card__actions">
           <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
@@ -495,8 +540,8 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
           <li>オセロ: 挟める場所にだけ置けます。置けない場合は自動でパス判定されます。</li>
           <li>五目並べ: 15x15 盤で先に 5 連を作った側が勝ちです。</li>
           <li>四目並べ: 列を選んでディスクを落とし、縦横斜めに 4 連を作ります。</li>
-          <li>じゃんけん: あいこなら自動で次ラウンドへ進みます。</li>
-          <li>ババ抜き: 相手の伏せ札から 1 枚引き、同じ数字のペアは自動で捨てられます。最後にジョーカーが残った側が負けです。</li>
+          <li>じゃんけん: 2 人以上で対戦できます。勝ち手が複数人いれば同時勝利、全員ばらけたら次ラウンドです。</li>
+          <li>ババ抜き: 2 人から 4 人まで対応し、bot 補充も可能です。手番では前の席の伏せ札から 1 枚引きます。</li>
         </ul>
         <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
           一覧へ戻る
@@ -537,7 +582,8 @@ class ApiRequestError extends Error {
 
 async function createRoomOnServer(
   gameId: CreateRoomRequest["gameId"],
-  playerName: string
+  playerName: string,
+  settings?: Partial<RoomSettings>
 ): Promise<RoomMutationResponse> {
   if (playerName.trim().length < 2) {
     throw new Error("表示名は 2 文字以上で入力してください。");
@@ -548,7 +594,8 @@ async function createRoomOnServer(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       gameId,
-      playerName
+      playerName,
+      settings
     } satisfies CreateRoomRequest)
   });
 
@@ -556,4 +603,12 @@ async function createRoomOnServer(
   window.localStorage.setItem(PLAYER_NAME_KEY, playerName);
   window.localStorage.setItem(`${ROOM_SESSION_KEY}${payload.snapshot.roomId}`, payload.sessionId);
   return payload;
+}
+
+function formatSeatRange(gameId: GameId): string {
+  const game = GAME_MAP[gameId];
+  if (game.minSeats === game.maxSeats) {
+    return `${game.maxSeats} 人`;
+  }
+  return `${game.minSeats}-${game.maxSeats} 人`;
 }
