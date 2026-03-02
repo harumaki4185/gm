@@ -185,6 +185,8 @@ export interface MahjongPlayerView {
   discardCount: number;
   isCurrent: boolean;
   isDealer: boolean;
+  isRiichi: boolean;
+  isFuriten: boolean;
   isWinner: boolean;
   melds: MahjongMeldView[];
 }
@@ -228,20 +230,28 @@ export interface MahjongResultView {
 
 export interface MahjongView {
   kind: "mahjong";
-  phase: "playing" | "finished";
+  phase: "playing" | "round_result" | "finished";
   canAct: boolean;
   canTsumo: boolean;
+  canRiichi: boolean;
+  canAdvanceRound: boolean;
   currentSeat: number | null;
   dealerSeat: number;
   roundLabel: string;
+  honba: number;
+  riichiSticks: number;
   wallCount: number;
   deadWallCount: number;
-  doraIndicator: string | null;
+  doraIndicators: string[];
   winnerSeats: number[];
+  tenpaiSeats: number[];
   statusMessage: string;
   lastAction: string | null;
   finishReason: string | null;
   selfHand: string[];
+  riichiDiscardOptions: string[];
+  ankanOptions: string[][];
+  kakanOptions: string[];
   players: MahjongPlayerView[];
   discards: MahjongDiscardView[];
   pendingCall: MahjongPendingCallView | null;
@@ -353,6 +363,10 @@ export type ClientAction =
       tile: string;
     }
   | {
+      type: "mahjong_declare_riichi";
+      tile: string;
+    }
+  | {
       type: "mahjong_tsumo";
     }
   | {
@@ -365,6 +379,17 @@ export type ClientAction =
       type: "mahjong_call";
       call: "chi" | "pon" | "kan";
       tiles: string[];
+    }
+  | {
+      type: "mahjong_ankan";
+      tiles: string[];
+    }
+  | {
+      type: "mahjong_kakan";
+      tile: string;
+    }
+  | {
+      type: "mahjong_next_round";
     };
 
 export interface ActionRequest {

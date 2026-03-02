@@ -264,7 +264,18 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
   }
 
   if (room.gameState.type === "mahjong") {
-    if (room.gameState.phase === "finished" || room.gameState.currentSeat === null) {
+    if (room.gameState.phase === "finished") {
+      return;
+    }
+    if (room.gameState.phase === "round_result") {
+      room.gameState.statusMessage = room.gameState.statusMessage || "局結果を確認して次局へ進めてください。";
+      return;
+    }
+    if (room.gameState.pendingCall) {
+      room.gameState.statusMessage = room.gameState.statusMessage || "鳴きやロンの選択を待っています。";
+      return;
+    }
+    if (room.gameState.currentSeat === null) {
       return;
     }
     room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "が打牌する番です");

@@ -734,6 +734,35 @@ button {
   padding: 14px;
 }
 
+.mahjong-meta__tiles,
+.mahjong-player__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mahjong-badge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.75rem;
+  background: rgba(29, 26, 23, 0.08);
+}
+
+.mahjong-badge--riichi {
+  background: rgba(180, 63, 50, 0.14);
+  color: var(--red);
+}
+
+.mahjong-badge--furiten {
+  background: rgba(22, 93, 182, 0.14);
+  color: var(--blue);
+}
+
+.mahjong-badge--winner {
+  background: rgba(201, 138, 35, 0.16);
+  color: var(--gold);
+}
+
 .mahjong-player--current {
   box-shadow: inset 0 0 0 2px rgba(22, 93, 182, 0.2);
 }
@@ -824,6 +853,10 @@ button {
 
 .mahjong-tile--z {
   color: #1d1a17;
+}
+
+.mahjong-tile--riichi-option {
+  box-shadow: inset 0 0 0 2px rgba(180, 63, 50, 0.24);
 }
 
 .detail-card {

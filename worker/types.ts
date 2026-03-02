@@ -107,18 +107,32 @@ export interface SpadesState {
 
 export interface MahjongState {
   type: "mahjong";
-  phase: "playing" | "finished";
+  phase: "playing" | "round_result" | "finished";
+  matchType: "tonpuu" | "hanchan";
+  roundWind: "east" | "south";
+  roundNumber: number;
   roundLabel: string;
   dealerSeat: number;
   currentSeat: number | null;
+  honba: number;
+  riichiSticks: number;
   scores: number[];
   hands: string[][];
   melds: MahjongMeld[][];
   discards: string[][];
   wall: string[];
   deadWall: string[];
-  doraIndicator: string | null;
+  doraIndicators: string[];
+  uraDoraIndicators: string[];
+  lastDrawTile: string | null;
+  lastDrawSeat: number | null;
+  drawSource: "wall" | "rinshan" | null;
+  riichiSeats: number[];
+  ippatsuEligible: boolean[];
+  sameTurnFuriten: boolean[];
+  riichiFuriten: boolean[];
   winnerSeats: number[];
+  tenpaiSeats: number[];
   statusMessage: string;
   lastAction: string | null;
   finishReason: string | null;
@@ -138,9 +152,13 @@ export interface MahjongRonPendingCall {
   stage: "ron";
   discardSeat: number;
   discardTile: string;
+  source: "discard" | "kakan";
   eligibleSeats: number[];
   acceptedSeats: number[];
   passedSeats: number[];
+  kakanSeat?: number;
+  kakanTile?: string;
+  kakanMeldIndex?: number;
 }
 
 export interface MahjongClaimPendingCall {

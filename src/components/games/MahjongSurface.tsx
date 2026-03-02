@@ -8,6 +8,8 @@ interface MahjongSurfaceProps {
 }
 
 export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfaceProps) {
+  const riichiOptionTiles = new Set(view.riichiDiscardOptions);
+
   return (
     <section className="surface-card">
       <h2>麻雀</h2>
@@ -20,6 +22,14 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
           <strong>{view.roundLabel}</strong>
         </div>
         <div>
+          <span>本場</span>
+          <strong>{view.honba}</strong>
+        </div>
+        <div>
+          <span>供託</span>
+          <strong>{view.riichiSticks}</strong>
+        </div>
+        <div>
           <span>山</span>
           <strong>{view.wallCount} 枚</strong>
         </div>
@@ -29,7 +39,17 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
         </div>
         <div>
           <span>ドラ表示</span>
-          <strong>{view.doraIndicator ? formatMahjongTile(view.doraIndicator) : "-"}</strong>
+          <div className="mahjong-meta__tiles">
+            {view.doraIndicators.length === 0 ? (
+              <strong>-</strong>
+            ) : (
+              view.doraIndicators.map((tile, index) => (
+                <div className={getMahjongTileClass(tile)} key={`${tile}-${index}`}>
+                  {formatMahjongTile(tile)}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
@@ -46,6 +66,11 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
               {player.isDealer ? " / 親" : ""}
             </strong>
             <span>{player.score.toLocaleString()} 点</span>
+            <div className="mahjong-player__badges">
+              {player.isRiichi ? <span className="mahjong-badge mahjong-badge--riichi">立直</span> : null}
+              {player.isFuriten ? <span className="mahjong-badge mahjong-badge--furiten">フリテン</span> : null}
+              {player.isWinner ? <span className="mahjong-badge mahjong-badge--winner">和了</span> : null}
+            </div>
             <span>手牌 {player.handCount} 枚</span>
             <span>河 {player.discardCount} 枚</span>
             {player.melds.length > 0 ? (
@@ -98,8 +123,8 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
               {river.tiles.length === 0 ? (
                 <span className="mahjong-river__empty">まだ捨て牌はありません</span>
               ) : (
-                river.tiles.map((tile) => (
-                  <div className={getMahjongTileClass(tile)} key={tile}>
+                river.tiles.map((tile, index) => (
+                  <div className={getMahjongTileClass(tile)} key={`${river.seat}-${tile}-${index}`}>
                     {formatMahjongTile(tile)}
                   </div>
                 ))
@@ -120,11 +145,70 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
           <p className="surface-status">観戦中は非公開の手牌情報を表示しません。</p>
         ) : (
           <>
+            {view.canAdvanceRound ? (
+              <div className="mahjong-actions">
+                <button className="primary-button" onClick={() => onAction({ type: "mahjong_next_round" })}>
+                  次局へ進む
+                </button>
+              </div>
+            ) : null}
+
             {view.canTsumo ? (
               <div className="mahjong-actions">
                 <button className="primary-button" onClick={() => onAction({ type: "mahjong_tsumo" })}>
                   ツモ
                 </button>
+              </div>
+            ) : null}
+
+            {view.canRiichi ? (
+              <div className="mahjong-call-group">
+                <strong>立直</strong>
+                <div className="mahjong-actions">
+                  {view.riichiDiscardOptions.map((tile, index) => (
+                    <button
+                      className="primary-button"
+                      key={`riichi-${tile}-${index}`}
+                      onClick={() => onAction({ type: "mahjong_declare_riichi", tile })}
+                    >
+                      {formatMahjongTile(tile)} を切って立直
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {view.ankanOptions.length > 0 ? (
+              <div className="mahjong-call-group">
+                <strong>暗槓</strong>
+                <div className="mahjong-actions">
+                  {view.ankanOptions.map((tiles, index) => (
+                    <button
+                      className="ghost-button"
+                      key={`ankan-${tiles.join("-")}-${index}`}
+                      onClick={() => onAction({ type: "mahjong_ankan", tiles })}
+                    >
+                      {tiles.map((tile) => formatMahjongTile(tile)).join(" ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {view.kakanOptions.length > 0 ? (
+              <div className="mahjong-call-group">
+                <strong>加槓</strong>
+                <div className="mahjong-actions">
+                  {view.kakanOptions.map((tile, index) => (
+                    <button
+                      className="ghost-button"
+                      key={`kakan-${tile}-${index}`}
+                      onClick={() => onAction({ type: "mahjong_kakan", tile })}
+                    >
+                      {formatMahjongTile(tile)} を加槓
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
 
@@ -146,11 +230,13 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
             ) : null}
 
             <div className="mahjong-hand">
-              {view.selfHand.map((tile) => (
+              {view.selfHand.map((tile, index) => (
                 <button
-                  className={getMahjongTileClass(tile)}
+                  className={`${getMahjongTileClass(tile)} ${
+                    riichiOptionTiles.has(tile) ? "mahjong-tile--riichi-option" : ""
+                  }`}
                   disabled={!view.canAct || view.pendingCall !== null}
-                  key={tile}
+                  key={`${tile}-${index}`}
                   onClick={() => onAction({ type: "mahjong_discard", tile })}
                   title={view.canAct && view.pendingCall === null ? "この牌を打牌する" : "現在は打牌できません"}
                 >
