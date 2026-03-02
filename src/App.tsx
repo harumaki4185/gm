@@ -58,31 +58,10 @@ export default function App() {
 
 function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
   const [playerName, setPlayerName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
-  const [pendingGameId, setPendingGameId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     writeStorage(PLAYER_NAME_KEY, playerName);
   }, [playerName]);
-
-  const createRoom = async (gameId: CreateRoomRequest["gameId"]) => {
-    if (playerName.trim().length < 2) {
-      setError("表示名は 2 文字以上で入力してください。");
-      return;
-    }
-
-    setPendingGameId(gameId);
-    setError(null);
-
-    try {
-      const payload = await createRoomOnServer(gameId, playerName, getDefaultRoomSettings(gameId));
-      navigate({ kind: "room", roomId: payload.snapshot.roomId });
-    } catch (requestError) {
-      setError(getMessage(requestError));
-    } finally {
-      setPendingGameId(null);
-    }
-  };
 
   return (
     <main className="layout">
@@ -109,17 +88,14 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
           <button className="ghost-button" onClick={() => navigate({ kind: "help" })}>
             ルールとヘルプ
           </button>
-          {error ? <p className="inline-error">{error}</p> : null}
         </div>
       </section>
 
       <section className="catalog">
         {GAME_CATALOG.map((game) => (
           <GameCard
-            busy={pendingGameId === game.id}
             game={game}
             key={game.id}
-            onCreate={createRoom}
             onOpenDetails={(gameId) => navigate({ kind: "game", gameId })}
           />
         ))}

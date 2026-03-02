@@ -3,12 +3,10 @@ import type { GameCatalogEntry } from "../shared/types";
 
 interface GameCardProps {
   game: GameCatalogEntry;
-  busy: boolean;
-  onCreate: (gameId: GameCatalogEntry["id"]) => void;
   onOpenDetails: (gameId: GameCatalogEntry["id"]) => void;
 }
 
-export function GameCard({ game, busy, onCreate, onOpenDetails }: GameCardProps) {
+export function GameCard({ game, onOpenDetails }: GameCardProps) {
   return (
     <article className="game-card" style={{ "--accent": game.accent } as CSSProperties}>
       <div className="game-card__header">
@@ -34,16 +32,17 @@ export function GameCard({ game, busy, onCreate, onOpenDetails }: GameCardProps)
           <dd>{game.supportsBots ? "対応" : "不要"}</dd>
         </div>
       </dl>
+      {game.supportsBots ? <p className="game-card__description">bot 補充や人数設定は作成画面で選べます。</p> : null}
       <div className="game-card__actions">
         <button className="ghost-button" onClick={() => onOpenDetails(game.id)}>
           詳細
         </button>
         <button
           className="primary-button"
-          disabled={busy || game.availability !== "active"}
-          onClick={() => onCreate(game.id)}
+          disabled={game.availability !== "active"}
+          onClick={() => onOpenDetails(game.id)}
         >
-          {game.availability === "active" ? "ルームを作成" : "実装待ち"}
+          {game.availability === "active" ? "設定して作成" : "実装待ち"}
         </button>
       </div>
     </article>
