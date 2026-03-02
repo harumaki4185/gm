@@ -255,6 +255,18 @@ function RoomPage({
     };
   }, [roomId, sessionId, socketRevision]);
 
+  useEffect(() => {
+    if (sessionId || !snapshot || snapshot.roomStatus === "waiting") {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setRefreshRevision((value) => value + 1);
+    }, 2500);
+
+    return () => window.clearInterval(timer);
+  }, [sessionId, snapshot?.roomStatus]);
+
   const joinRoom = async () => {
     if (joinName.trim().length < 2) {
       setError("表示名は 2 文字以上で入力してください。");
@@ -389,7 +401,7 @@ function RoomPage({
           ) : (
             <p>状態を取得しています。</p>
           )}
-          {snapshot?.roomStatus === "finished" ? (
+          {snapshot?.roomStatus === "finished" && sessionId ? (
             <button className="primary-button" onClick={() => void requestRematch()}>
               再戦をリクエスト
             </button>
@@ -421,10 +433,13 @@ function RoomPage({
                 </button>
               </div>
             ) : (
-              <div className="join-card">
-                <h2>新規参加は締め切られました</h2>
-                <p>このルームはすでに開始済みです。参加済みブラウザからのみ再接続できます。</p>
-              </div>
+              <>
+                <div className="join-card">
+                  <h2>観戦モード</h2>
+                  <p>このルームの新規参加は締め切られています。現在の対戦状況を閲覧できます。</p>
+                </div>
+                <GameSurface onAction={sendAction} snapshot={snapshot} />
+              </>
             )
           ) : snapshot ? (
             <GameSurface onAction={sendAction} snapshot={snapshot} />
