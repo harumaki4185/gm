@@ -1,19 +1,17 @@
-import { GAME_MAP } from "../../shared/games";
 import type {
   BoardPosition,
   ClientAction,
   Connect4View,
-  PlacementBoardView,
-  RoomSnapshot
+  PlacementBoardView
 } from "../../shared/types";
 
 interface BoardSurfaceProps {
-  snapshot: RoomSnapshot;
+  gameTitle: string;
   view: Connect4View | PlacementBoardView;
   onAction: (action: ClientAction) => void;
 }
 
-export function BoardSurface({ snapshot, view, onAction }: BoardSurfaceProps) {
+export function BoardSurface({ gameTitle, view, onAction }: BoardSurfaceProps) {
   if (view.kind === "connect4") {
     return (
       <section className="surface-card">
@@ -57,7 +55,7 @@ export function BoardSurface({ snapshot, view, onAction }: BoardSurfaceProps) {
 
   return (
     <section className="surface-card">
-      <h2>{GAME_MAP[snapshot.gameId].title}</h2>
+      <h2>{gameTitle}</h2>
       <p className="surface-status">{view.statusMessage}</p>
       <div
         className={`board board--${view.kind}`}

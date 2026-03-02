@@ -1,3 +1,4 @@
+import { GAME_MAP } from "../shared/games";
 import type { ClientAction, RoomSnapshot } from "../shared/types";
 import { BoardSurface } from "./games/BoardSurface";
 import { JankenSurface } from "./games/JankenSurface";
@@ -29,5 +30,5 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
     return <OldMaidSurface onAction={onAction} view={view} />;
   }
 
-  return <BoardSurface onAction={onAction} snapshot={snapshot} view={view} />;
+  return <BoardSurface gameTitle={GAME_MAP[snapshot.gameId].title} onAction={onAction} view={view} />;
 }
