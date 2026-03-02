@@ -19,7 +19,8 @@ import type {
   RematchRequest,
   RoomSettings,
   RoomMutationResponse,
-  RoomSnapshot
+  RoomSnapshot,
+  UpdateRoomSettingsRequest
 } from "./shared/types";
 
 const PLAYER_NAME_KEY = "classic-duels/player-name";
@@ -116,6 +117,7 @@ function RoomPage({
   const [joinName, setJoinName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [waitingSettingsBusy, setWaitingSettingsBusy] = useState(false);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [socketRevision, setSocketRevision] = useState(0);
   const skipNextReconnectRef = useRef(false);
@@ -301,6 +303,30 @@ function RoomPage({
     }
   };
 
+  const updateWaitingBots = async (fillWithBots: boolean) => {
+    if (!sessionId) {
+      return;
+    }
+    setWaitingSettingsBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          settings: { fillWithBots }
+        } satisfies UpdateRoomSettingsRequest)
+      });
+      const payload = await parseResponse<RoomSnapshot>(response);
+      setSnapshot(payload);
+    } catch (requestError) {
+      setError(getMessage(requestError));
+    } finally {
+      setWaitingSettingsBusy(false);
+    }
+  };
+
   const copyInvite = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -414,7 +440,12 @@ function RoomPage({
               </>
             )
           ) : snapshot ? (
-            <GameSurface onAction={sendAction} snapshot={snapshot} />
+            <GameSurface
+              onAction={sendAction}
+              onWaitingBotsChange={updateWaitingBots}
+              snapshot={snapshot}
+              waitingSettingsBusy={waitingSettingsBusy}
+            />
           ) : (
             <div className="join-card">
               <h2>ルームに接続中</h2>

@@ -77,7 +77,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     const raw = await request.text();
     const forwardBody = raw.length > 0 ? raw : "{}";
 
-    if (action === "join" || action === "reconnect" || action === "actions" || action === "rematch") {
+    if (
+      action === "join" ||
+      action === "reconnect" ||
+      action === "actions" ||
+      action === "rematch" ||
+      action === "settings"
+    ) {
       return stub.fetch(`https://room.internal/${action}`, {
         method: "POST",
         headers: {

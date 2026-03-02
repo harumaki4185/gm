@@ -11,14 +11,28 @@ import { WaitingSurface } from "./games/WaitingSurface";
 interface GameSurfaceProps {
   snapshot: RoomSnapshot;
   onAction: (action: ClientAction) => void;
+  onWaitingBotsChange?: (fillWithBots: boolean) => void;
+  waitingSettingsBusy?: boolean;
 }
 
-export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
+export function GameSurface({
+  snapshot,
+  onAction,
+  onWaitingBotsChange,
+  waitingSettingsBusy = false
+}: GameSurfaceProps) {
   const view = snapshot.gameView;
   const isSpectator = snapshot.selfSeat === null && snapshot.roomStatus !== "waiting";
 
   if (view.kind === "waiting") {
-    return <WaitingSurface view={view} />;
+    return (
+      <WaitingSurface
+        onWaitingBotsChange={onWaitingBotsChange}
+        snapshot={snapshot}
+        view={view}
+        waitingSettingsBusy={waitingSettingsBusy}
+      />
+    );
   }
 
   if (view.kind === "planned") {

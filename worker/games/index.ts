@@ -131,7 +131,8 @@ export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
       requiredHumans,
       connectedHumans,
       totalSeats: room.settings.seatCount,
-      supportsBots: game.supportsBots
+      supportsBots: game.supportsBots,
+      fillWithBots: room.settings.fillWithBots
     };
   }
 

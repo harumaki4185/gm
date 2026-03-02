@@ -7,7 +7,8 @@ import type {
   ReconnectRoomRequest,
   RematchRequest,
   RoomMutationResponse,
-  RoomSnapshot
+  RoomSnapshot,
+  UpdateRoomSettingsRequest
 } from "../src/shared/types";
 import { AppError, assert } from "./errors";
 import {
@@ -61,6 +62,10 @@ export class RoomDurableObject {
 
       if (url.pathname === "/rematch" && request.method === "POST") {
         return this.handleRematch((await request.json()) as RematchRequest);
+      }
+
+      if (url.pathname === "/settings" && request.method === "POST") {
+        return this.handleUpdateSettings((await request.json()) as UpdateRoomSettingsRequest);
       }
 
       if (url.pathname === "/state" && request.method === "GET") {
@@ -294,6 +299,33 @@ export class RoomDurableObject {
       }
     }
 
+    room.updatedAt = nowIso();
+    await this.saveRoom(room);
+    await this.syncAlarm(room.lifecycleAlarm);
+    await this.broadcastRoom(room);
+
+    return json(this.makeSnapshot(room, body.sessionId));
+  }
+
+  private async handleUpdateSettings(body: UpdateRoomSettingsRequest): Promise<Response> {
+    const room = await this.requireRoom();
+    const actor = room.players.find((player) => player.sessionId === body.sessionId);
+    assert(actor && actor.playerType === "human", "操作権限がありません", 403);
+    assert(actor.isHost, "ルーム設定を変更できるのはホストだけです", 403);
+    assert(room.roomStatus === "waiting", "ルーム設定は開始前のみ変更できます", 409);
+
+    const game = GAME_MAP[room.gameId];
+    assert(game.supportsBots, "このゲームでは bot 補充を変更できません", 409);
+
+    const humanPlayerCount = room.players.filter((player) => player.playerType === "human").length;
+    const nextSettings = normalizeRoomSettings(room.gameId, {
+      ...room.settings,
+      ...body.settings
+    });
+    assert(nextSettings.seatCount >= humanPlayerCount, "現在の参加人数より少ない席数にはできません", 409);
+
+    room.settings = nextSettings;
+    maybeStartRoom(room);
     room.updatedAt = nowIso();
     await this.saveRoom(room);
     await this.syncAlarm(room.lifecycleAlarm);

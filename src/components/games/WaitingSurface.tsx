@@ -1,6 +1,22 @@
-import type { WaitingView } from "../../shared/types";
+import type { RoomSnapshot, WaitingView } from "../../shared/types";
 
-export function WaitingSurface({ view }: { view: WaitingView }) {
+export function WaitingSurface({
+  snapshot,
+  view,
+  onWaitingBotsChange,
+  waitingSettingsBusy
+}: {
+  snapshot: RoomSnapshot;
+  view: WaitingView;
+  onWaitingBotsChange?: (fillWithBots: boolean) => void;
+  waitingSettingsBusy: boolean;
+}) {
+  const selfPlayer =
+    snapshot.selfPlayerId === null
+      ? null
+      : snapshot.players.find((player) => player.id === snapshot.selfPlayerId) ?? null;
+  const canConfigureBots = Boolean(selfPlayer?.isHost && view.supportsBots && onWaitingBotsChange);
+
   return (
     <section className="surface-card">
       <h2>対戦待機中</h2>
@@ -18,9 +34,25 @@ export function WaitingSurface({ view }: { view: WaitingView }) {
         </div>
         <div>
           <span>bot 補充</span>
-          <strong>{view.supportsBots ? "対応" : "なし"}</strong>
+          <strong>
+            {view.supportsBots ? (view.fillWithBots ? "開始時に補充する" : "補充しない") : "なし"}
+          </strong>
         </div>
       </div>
+      {canConfigureBots ? (
+        <div className="waiting-controls">
+          <p className="surface-status">ホスト設定: 人数が足りない場合に bot を入れて開始するかを待機中に切り替えられます。</p>
+          <label className="checkbox-field">
+            <input
+              checked={view.fillWithBots}
+              disabled={waitingSettingsBusy}
+              onChange={(event) => onWaitingBotsChange?.(event.target.checked)}
+              type="checkbox"
+            />
+            <span>{waitingSettingsBusy ? "設定を更新中..." : "不足席を bot で補充して開始する"}</span>
+          </label>
+        </div>
+      ) : null}
     </section>
   );
 }

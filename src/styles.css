@@ -387,6 +387,12 @@ button {
   gap: 8px;
 }
 
+.waiting-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .janken-slots {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

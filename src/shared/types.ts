@@ -56,6 +56,7 @@ export interface WaitingView {
   connectedHumans: number;
   totalSeats: number;
   supportsBots: boolean;
+  fillWithBots: boolean;
 }
 
 export interface PlannedView {
@@ -277,6 +278,11 @@ export interface ActionRequest {
 
 export interface RematchRequest {
   sessionId: string;
+}
+
+export interface UpdateRoomSettingsRequest {
+  sessionId: string;
+  settings: Partial<RoomSettings>;
 }
 
 export interface ApiErrorBody {
