@@ -110,6 +110,7 @@ export interface SevensPlayerView {
   passCount: number;
   isCurrent: boolean;
   isWinner: boolean;
+  placement: number | null;
 }
 
 export interface SevensView {
@@ -123,6 +124,7 @@ export interface SevensView {
   legalCards: string[];
   suits: SevensSuitRangeView[];
   players: SevensPlayerView[];
+  placements: number[];
 }
 
 export interface SpadesPlayerView {

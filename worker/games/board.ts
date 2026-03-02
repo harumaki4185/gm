@@ -6,6 +6,7 @@ import type {
 } from "../../src/shared/types";
 import { AppError } from "../errors";
 import type { Connect4State, PlacementState, RoomRecord } from "../types";
+import { formatPlayerLabel, formatTurnMessage } from "./common";
 
 const CONNECT4_WIN_LENGTH = 4;
 const GOMOKU_WIN_LENGTH = 5;
@@ -110,7 +111,7 @@ export function applyConnect4Action(room: RoomRecord, seat: number, action: Clie
   if (winningLine.length > 0) {
     state.winnerSeat = seat;
     state.winningLine = winningLine;
-    state.statusMessage = `プレイヤー ${seat + 1} の勝ちです`;
+    state.statusMessage = `${formatPlayerLabel(room, seat)} の勝ちです`;
     room.roomStatus = "finished";
     return;
   }
@@ -122,7 +123,7 @@ export function applyConnect4Action(room: RoomRecord, seat: number, action: Clie
   }
 
   state.currentSeat = seat === 0 ? 1 : 0;
-  state.statusMessage = `プレイヤー ${state.currentSeat + 1} の手番です`;
+  state.statusMessage = formatTurnMessage(room, state.currentSeat, "の手番です");
 }
 
 export function applyPlacementAction(room: RoomRecord, seat: number, action: ClientAction): void {
@@ -146,7 +147,7 @@ export function applyPlacementAction(room: RoomRecord, seat: number, action: Cli
     if (winningLine.length > 0) {
       state.winnerSeat = seat;
       state.winningLine = winningLine;
-      state.statusMessage = `プレイヤー ${seat + 1} の勝ちです`;
+      state.statusMessage = `${formatPlayerLabel(room, seat)} の勝ちです`;
       room.roomStatus = "finished";
       return;
     }
@@ -159,7 +160,7 @@ export function applyPlacementAction(room: RoomRecord, seat: number, action: Cli
 
     state.currentSeat = seat === 0 ? 1 : 0;
     state.legalMoves = getEmptyCells(state.board);
-    state.statusMessage = `プレイヤー ${state.currentSeat + 1} の手番です`;
+    state.statusMessage = formatTurnMessage(room, state.currentSeat, "の手番です");
     return;
   }
 
@@ -178,7 +179,7 @@ export function applyPlacementAction(room: RoomRecord, seat: number, action: Cli
   if (nextMoves.length > 0) {
     state.currentSeat = nextSeat;
     state.legalMoves = nextMoves;
-    state.statusMessage = `プレイヤー ${nextSeat + 1} の手番です`;
+    state.statusMessage = formatTurnMessage(room, nextSeat, "の手番です");
     return;
   }
 
@@ -186,7 +187,7 @@ export function applyPlacementAction(room: RoomRecord, seat: number, action: Cli
   if (sameSeatMoves.length > 0) {
     state.currentSeat = seat;
     state.legalMoves = sameSeatMoves;
-    state.statusMessage = `プレイヤー ${nextSeat + 1} はパスです。プレイヤー ${seat + 1} の手番です`;
+    state.statusMessage = `${formatPlayerLabel(room, nextSeat)} はパスです。${formatTurnMessage(room, seat, "の手番です")}`;
     return;
   }
 
@@ -194,7 +195,7 @@ export function applyPlacementAction(room: RoomRecord, seat: number, action: Cli
   state.winnerSeat = counts[0] === counts[1] ? null : counts[0] > counts[1] ? 0 : 1;
   state.legalMoves = [];
   state.statusMessage =
-    state.winnerSeat === null ? "引き分けです" : `プレイヤー ${state.winnerSeat + 1} の勝ちです`;
+    state.winnerSeat === null ? "引き分けです" : `${formatPlayerLabel(room, state.winnerSeat)} の勝ちです`;
   room.roomStatus = "finished";
 }
 

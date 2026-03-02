@@ -11,7 +11,7 @@ import type {
 } from "../../src/shared/types";
 import { AppError } from "../errors";
 import type { OldMaidState, RoomRecord } from "../types";
-import { formatPlayerLabel, formatWinnerMessage } from "./common";
+import { formatPlayerLabel, formatTurnMessage, formatWinnerMessage } from "./common";
 
 const MAX_BOT_ITERATIONS = 100;
 
@@ -53,7 +53,7 @@ export function createOldMaidState(seatCount: number): OldMaidState {
     } else {
       state.winnerSeats = result.winnerSeats;
       state.loserSeat = result.loserSeat;
-      state.statusMessage = formatWinnerMessage(result.winnerSeats, "勝ちです");
+      state.statusMessage = "勝者が確定しています";
     }
   }
 
@@ -158,7 +158,7 @@ export function applyOldMaidAction(room: RoomRecord, seat: number, action: Clien
     }
     state.winnerSeats = result.winnerSeats;
     state.loserSeat = result.loserSeat;
-    state.statusMessage = formatWinnerMessage(result.winnerSeats, "勝ちです");
+    state.statusMessage = formatWinnerMessage(room, result.winnerSeats, "勝ちです");
     return;
   }
 
@@ -172,7 +172,7 @@ export function applyOldMaidAction(room: RoomRecord, seat: number, action: Clien
   }
 
   state.currentSeat = nextSeat;
-  state.statusMessage = `プレイヤー ${nextSeat + 1} がカードを引く番です`;
+  state.statusMessage = formatTurnMessage(room, nextSeat, "がカードを引く番です");
 }
 
 export function advanceOldMaidBotTurns(room: RoomRecord): void {
@@ -203,7 +203,7 @@ export function advanceOldMaidBotTurns(room: RoomRecord): void {
       if (result?.kind === "resolved") {
         room.gameState.winnerSeats = result.winnerSeats;
         room.gameState.loserSeat = result.loserSeat;
-        room.gameState.statusMessage = formatWinnerMessage(result.winnerSeats, "勝ちです");
+        room.gameState.statusMessage = formatWinnerMessage(room, result.winnerSeats, "勝ちです");
         room.roomStatus = "finished";
       } else if (result?.kind === "draw") {
         room.gameState.winnerSeats = [];

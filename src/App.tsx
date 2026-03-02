@@ -333,6 +333,10 @@ function RoomPage({
     setSocketRevision(0);
   };
 
+  const currentSeat = snapshot ? resolveCurrentSeat(snapshot.gameView) : null;
+  const winnerSeats = snapshot ? resolveWinnerSeats(snapshot.gameView) : [];
+  const currentPlayer = currentSeat === null ? null : snapshot?.players.find((player) => player.seat === currentSeat) ?? null;
+
   return (
     <main className="layout layout--room">
       <header className="room-header">
@@ -361,9 +365,18 @@ function RoomPage({
           {snapshot ? (
             <ul className="player-list">
               {snapshot.players.map((player) => (
-                <li key={player.id}>
+                <li
+                  className={`${player.seat === currentSeat ? "player-list__item--current" : ""} ${
+                    winnerSeats.includes(player.seat) ? "player-list__item--winner" : ""
+                  }`}
+                  key={player.id}
+                >
                   <span>
                     {player.name}
+                    {player.seat === currentSeat ? " / 手番" : ""}
+                    {resolveSevensPlacement(snapshot.gameView, player.seat) !== null
+                      ? ` / ${resolveSevensPlacement(snapshot.gameView, player.seat)}位`
+                      : ""}
                     {snapshot.rematchVotes.includes(player.seat) ? " / 再戦投票済み" : ""}
                   </span>
                   <strong>
@@ -384,6 +397,7 @@ function RoomPage({
         </aside>
 
         <section className="room-main">
+          {currentPlayer ? <p className="room-turn-banner">現在の手番: {currentPlayer.name}</p> : null}
           {!sessionId ? (
             !snapshot ? (
               <div className="join-card">
@@ -566,6 +580,44 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
 
 function resolveGameTitle(gameId: RoomSnapshot["gameId"]): string {
   return GAME_CATALOG.find((game) => game.id === gameId)?.title ?? gameId;
+}
+
+function resolveCurrentSeat(gameView: RoomSnapshot["gameView"]): number | null {
+  switch (gameView.kind) {
+    case "old-maid":
+    case "sevens":
+    case "spades":
+    case "gomoku":
+    case "othello":
+    case "connect4":
+      return gameView.currentSeat;
+    default:
+      return null;
+  }
+}
+
+function resolveWinnerSeats(gameView: RoomSnapshot["gameView"]): number[] {
+  switch (gameView.kind) {
+    case "janken":
+    case "old-maid":
+    case "sevens":
+    case "spades":
+      return gameView.winnerSeats;
+    case "gomoku":
+    case "othello":
+    case "connect4":
+      return gameView.winnerSeat === null ? [] : [gameView.winnerSeat];
+    default:
+      return [];
+  }
+}
+
+function resolveSevensPlacement(gameView: RoomSnapshot["gameView"], seat: number): number | null {
+  if (gameView.kind !== "sevens") {
+    return null;
+  }
+  const player = gameView.players.find((entry) => entry.seat === seat);
+  return player?.placement ?? null;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

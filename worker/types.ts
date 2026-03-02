@@ -80,6 +80,7 @@ export interface SevensState {
   hands: string[][];
   currentSeat: number | null;
   winnerSeats: number[];
+  placements: number[];
   suitRanges: Record<CardSuit, { low: number; high: number }>;
   passCounts: number[];
   statusMessage: string;

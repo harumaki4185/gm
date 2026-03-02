@@ -280,6 +280,9 @@ export class RoomDurableObject {
       room.rematchVotes = [];
       room.gameState = createInitialGameState(room.gameId, room.settings.seatCount);
       room.roomStatus = getRoomStatusFromState(room.gameState);
+      if (room.roomStatus === "playing") {
+        resumeGameAfterReconnect(room);
+      }
       advanceAutomatedTurns(room);
       room.lifecycleAlarm = null;
       if (room.roomStatus === "finished") {
@@ -520,6 +523,9 @@ function maybeStartRoom(room: RoomRecord): void {
   room.rematchVotes = [];
   room.gameState = createInitialGameState(room.gameId, room.settings.seatCount);
   room.roomStatus = getRoomStatusFromState(room.gameState);
+  if (room.roomStatus === "playing") {
+    resumeGameAfterReconnect(room);
+  }
   advanceAutomatedTurns(room);
   room.lifecycleAlarm = null;
   if (room.roomStatus === "finished") {
@@ -535,6 +541,9 @@ function getRoomStatusFromState(roomState: RoomRecord["gameState"]): RoomRecord[
     return "finished";
   }
   if (roomState.type === "sevens" && roomState.winnerSeats.length > 0) {
+    return "finished";
+  }
+  if (roomState.type === "sevens" && roomState.currentSeat === null && roomState.placements.length > 0) {
     return "finished";
   }
   if (roomState.type === "spades" && roomState.stage === "finished") {

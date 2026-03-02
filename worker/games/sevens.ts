@@ -16,7 +16,12 @@ import type {
 } from "../../src/shared/types";
 import { AppError } from "../errors";
 import type { RoomRecord, SevensState } from "../types";
-import { formatPlayerLabel, formatWinnerMessage } from "./common";
+import {
+  formatPlacementSummary,
+  formatPlayerLabel,
+  formatTurnMessage,
+  formatWinnerMessage
+} from "./common";
 
 const MAX_BOT_ITERATIONS = 200;
 
@@ -47,6 +52,7 @@ export function createSevensState(seatCount: number): SevensState {
     hands,
     currentSeat: startingSeat,
     winnerSeats: [],
+    placements: [],
     suitRanges: {
       S: { low: 7, high: 7 },
       H: { low: 7, high: 7 },
@@ -69,7 +75,8 @@ export function buildSevensView(room: RoomRecord, state: SevensState, selfSeat: 
       cardCount: state.hands[player.seat]?.length ?? 0,
       passCount: state.passCounts[player.seat] ?? 0,
       isCurrent: state.currentSeat === player.seat,
-      isWinner: state.winnerSeats.includes(player.seat)
+      isWinner: state.winnerSeats.includes(player.seat),
+      placement: getSevensPlacement(state, player.seat)
     }));
   const suits: SevensSuitRangeView[] = CARD_SUITS.map((suit) => ({
     suit,
@@ -91,7 +98,8 @@ export function buildSevensView(room: RoomRecord, state: SevensState, selfSeat: 
     selfHand: selfSeat === null ? [] : sortCards(state.hands[selfSeat] ?? []),
     legalCards,
     suits,
-    players
+    players,
+    placements: [...state.placements]
   };
 }
 
@@ -117,7 +125,8 @@ export function applySevensAction(room: RoomRecord, seat: number, action: Client
       room.roomStatus = "finished";
       state.currentSeat = null;
       state.winnerSeats = [];
-      state.statusMessage = "これ以上出せるカードがないため引き分けです";
+      finalizeSevensPlacements(room, state, getRemainingSevensSeats(state));
+      state.statusMessage = `これ以上出せるカードがないため終了しました。${formatPlacementSummary(room, state.placements)}`;
       return;
     }
     moveToNextSevensTurn(room, state, seat);
@@ -143,18 +152,24 @@ export function applySevensAction(room: RoomRecord, seat: number, action: Client
   state.lastAction = `${formatPlayerLabel(room, seat)} が ${formatCardLabel(action.card)} を出しました`;
 
   if (hand.length === 0) {
-    room.roomStatus = "finished";
-    state.currentSeat = null;
-    state.winnerSeats = [seat];
-    state.statusMessage = formatWinnerMessage([seat], "勝ちです");
-    return;
+    recordSevensPlacement(state, seat);
+    state.lastAction = `${formatPlayerLabel(room, seat)} が ${state.placements.length} 位であがりました`;
+    const remainingSeats = getRemainingSevensSeats(state);
+    if (remainingSeats.length <= 1) {
+      room.roomStatus = "finished";
+      state.currentSeat = null;
+      finalizeSevensPlacements(room, state, remainingSeats);
+      state.statusMessage = `順位確定: ${formatPlacementSummary(room, state.placements)}`;
+      return;
+    }
   }
 
   if (!hasAnyPlayableSevensCard(state)) {
     room.roomStatus = "finished";
     state.currentSeat = null;
     state.winnerSeats = [];
-    state.statusMessage = "これ以上出せるカードがないため引き分けです";
+    finalizeSevensPlacements(room, state, getRemainingSevensSeats(state));
+    state.statusMessage = `これ以上出せるカードがないため終了しました。${formatPlacementSummary(room, state.placements)}`;
     return;
   }
 
@@ -173,6 +188,7 @@ export function advanceSevensBotTurns(room: RoomRecord): void {
       room.roomStatus = "finished";
       room.gameState.currentSeat = null;
       room.gameState.winnerSeats = [];
+      finalizeSevensPlacements(room, room.gameState, getRemainingSevensSeats(room.gameState));
       room.gameState.statusMessage = "bot の自動進行が上限に達したため終了しました";
       return;
     }
@@ -252,19 +268,19 @@ function moveToNextSevensTurn(room: RoomRecord, state: SevensState, seat: number
   if (nextSeat === null) {
     room.roomStatus = "finished";
     state.currentSeat = null;
-    state.winnerSeats = [];
-    state.statusMessage = "引き分けです";
+    finalizeSevensPlacements(room, state, getRemainingSevensSeats(state));
+    state.statusMessage = state.placements.length > 0 ? `順位確定: ${formatPlacementSummary(room, state.placements)}` : "引き分けです";
     return;
   }
 
   state.currentSeat = nextSeat;
-  state.statusMessage = `プレイヤー ${nextSeat + 1} がカードを出す番です`;
+  state.statusMessage = formatTurnMessage(room, nextSeat, "がカードを出す番です");
 }
 
 function getNextSevensSeat(state: SevensState, seat: number): number | null {
   for (let offset = 1; offset < state.hands.length; offset += 1) {
     const candidate = (seat + offset) % state.hands.length;
-    if ((state.hands[candidate]?.length ?? 0) > 0) {
+    if ((state.hands[candidate]?.length ?? 0) > 0 && getSevensPlacement(state, candidate) === null) {
       return candidate;
     }
   }
@@ -272,7 +288,38 @@ function getNextSevensSeat(state: SevensState, seat: number): number | null {
 }
 
 function hasAnyPlayableSevensCard(state: SevensState): boolean {
-  return state.hands.some((hand) => hand.length > 0 && getLegalSevensCardsForHand(hand, state.suitRanges).length > 0);
+  return state.hands.some(
+    (hand, seat) =>
+      hand.length > 0 && getSevensPlacement(state, seat) === null && getLegalSevensCardsForHand(hand, state.suitRanges).length > 0
+  );
+}
+
+function recordSevensPlacement(state: SevensState, seat: number): void {
+  if (getSevensPlacement(state, seat) === null) {
+    state.placements.push(seat);
+  }
+}
+
+function getRemainingSevensSeats(state: SevensState): number[] {
+  return state.hands
+    .map((hand, seat) => ({ hand, seat }))
+    .filter((entry) => entry.hand.length > 0 && getSevensPlacement(state, entry.seat) === null)
+    .map((entry) => entry.seat);
+}
+
+function finalizeSevensPlacements(room: RoomRecord, state: SevensState, trailingSeats: number[]): void {
+  for (const seat of trailingSeats) {
+    recordSevensPlacement(state, seat);
+  }
+  state.winnerSeats = state.placements.length > 0 ? [state.placements[0]] : [];
+  if (state.winnerSeats.length > 0 && trailingSeats.length === 0 && state.placements.length === 1) {
+    state.statusMessage = formatWinnerMessage(room, state.winnerSeats, "勝ちです");
+  }
+}
+
+function getSevensPlacement(state: SevensState, seat: number): number | null {
+  const index = state.placements.indexOf(seat);
+  return index >= 0 ? index + 1 : null;
 }
 
 function pickSevensBotCard(legalCards: readonly string[]): string {

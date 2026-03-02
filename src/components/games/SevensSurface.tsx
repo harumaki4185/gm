@@ -31,6 +31,7 @@ export function SevensSurface({ view, onAction }: SevensSurfaceProps) {
             key={player.seat}
           >
             <strong>{player.name}</strong>
+            {player.placement !== null ? <span>{player.placement} 位</span> : null}
             <span>{player.cardCount} 枚</span>
             <span>パス {player.passCount}</span>
           </div>

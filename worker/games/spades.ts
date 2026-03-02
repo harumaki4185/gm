@@ -15,7 +15,7 @@ import type {
 } from "../../src/shared/types";
 import { AppError } from "../errors";
 import type { RoomRecord, SpadesState } from "../types";
-import { formatPlayerLabel, formatWinnerMessage } from "./common";
+import { formatPlayerLabel, formatTurnMessage, formatWinnerMessage } from "./common";
 
 const MAX_BOT_ITERATIONS = 300;
 const SPADES_SUIT_ORDER = ["C", "D", "H", "S"] as const;
@@ -151,13 +151,13 @@ export function applySpadesAction(room: RoomRecord, seat: number, action: Client
     const nextSeat = getNextUnbidSeat(state, seat);
     if (nextSeat !== null) {
       state.currentSeat = nextSeat;
-      state.statusMessage = `プレイヤー ${nextSeat + 1} がビッドする番です`;
+      state.statusMessage = formatTurnMessage(room, nextSeat, "がビッドする番です");
       return;
     }
 
     state.stage = "playing";
     state.currentSeat = (state.dealerSeat + 1) % state.hands.length;
-    state.statusMessage = `プレイヤー ${state.currentSeat + 1} が最初のカードを出す番です`;
+    state.statusMessage = formatTurnMessage(room, state.currentSeat, "が最初のカードを出す番です");
     return;
   }
 
@@ -188,7 +188,7 @@ export function applySpadesAction(room: RoomRecord, seat: number, action: Client
   if (state.currentTrick.length < state.hands.length) {
     state.currentSeat = (seat + 1) % state.hands.length;
     state.lastAction = `${formatPlayerLabel(room, seat)} が ${formatCardLabel(action.card)} を出しました`;
-    state.statusMessage = `プレイヤー ${state.currentSeat + 1} がカードを出す番です`;
+    state.statusMessage = formatTurnMessage(room, state.currentSeat, "がカードを出す番です");
     return;
   }
 
@@ -196,9 +196,10 @@ export function applySpadesAction(room: RoomRecord, seat: number, action: Client
   state.tricksWon[trickWinner] = (state.tricksWon[trickWinner] ?? 0) + 1;
   state.completedTricks += 1;
   state.currentTrick = [];
-  state.lastAction = `${formatPlayerLabel(room, seat)} が ${formatCardLabel(action.card)} を出しました。プレイヤー ${
-    trickWinner + 1
-  } がトリックを獲得しました`;
+  state.lastAction = `${formatPlayerLabel(room, seat)} が ${formatCardLabel(action.card)} を出しました。${formatPlayerLabel(
+    room,
+    trickWinner
+  )} がトリックを獲得しました`;
 
   if (state.hands.every((entry) => entry.length === 0)) {
     finishSpadesHand(room, state);
@@ -206,7 +207,7 @@ export function applySpadesAction(room: RoomRecord, seat: number, action: Client
   }
 
   state.currentSeat = trickWinner;
-  state.statusMessage = `プレイヤー ${trickWinner + 1} がカードを出す番です`;
+  state.statusMessage = formatTurnMessage(room, trickWinner, "がカードを出す番です");
 }
 
 export function advanceSpadesBotTurns(room: RoomRecord): void {
@@ -337,9 +338,9 @@ function finishSpadesHand(room: RoomRecord, state: SpadesState): void {
 
   const winningTeam = state.teamScores[0] > state.teamScores[1] ? 0 : 1;
   state.winnerSeats = getTeamSeats(winningTeam);
-  state.statusMessage = `${formatWinnerMessage(state.winnerSeats, "勝ちです")} (${state.teamScores[0]} - ${
-    state.teamScores[1]
-  })`;
+    state.statusMessage = `${formatWinnerMessage(room, state.winnerSeats, "勝ちです")} (${state.teamScores[0]} - ${
+      state.teamScores[1]
+    })`;
 }
 
 function calculateSpadesTeamScore(state: SpadesState, team: number): number {

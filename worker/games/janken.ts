@@ -81,7 +81,7 @@ export function applyJankenAction(room: RoomRecord, seat: number, action: Client
 
   state.phase = "finished";
   state.winnerSeats = winnerSeats;
-  state.resultMessage = formatWinnerMessage(winnerSeats, "勝ちです");
+  state.resultMessage = formatWinnerMessage(room, winnerSeats, "勝ちです");
   room.roomStatus = "finished";
 }
 

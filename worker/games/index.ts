@@ -10,7 +10,7 @@ import {
   createGomokuState,
   createOthelloState
 } from "./board";
-import { formatWinnerMessage } from "./common";
+import { formatPlayerLabel, formatTurnMessage, formatWinnerMessage } from "./common";
 import { applyJankenAction, buildJankenView, createJankenState } from "./janken";
 import {
   advanceOldMaidBotTurns,
@@ -201,7 +201,7 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
   }
 
   if (room.gameState.type === "old-maid") {
-    room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} がカードを引く番です`;
+    room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "がカードを引く番です");
     return;
   }
 
@@ -209,7 +209,7 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
     if (room.gameState.currentSeat === null) {
       return;
     }
-    room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} がカードを出す番です`;
+    room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "がカードを出す番です");
     return;
   }
 
@@ -219,17 +219,17 @@ export function resumeGameAfterReconnect(room: RoomRecord): void {
     }
     room.gameState.statusMessage =
       room.gameState.stage === "bidding"
-        ? `プレイヤー ${room.gameState.currentSeat + 1} がビッドする番です`
-        : `プレイヤー ${room.gameState.currentSeat + 1} がカードを出す番です`;
+        ? formatTurnMessage(room, room.gameState.currentSeat, "がビッドする番です")
+        : formatTurnMessage(room, room.gameState.currentSeat, "がカードを出す番です");
     return;
   }
 
   if (room.gameState.type === "connect4") {
-    room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} の手番です`;
+    room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "の手番です");
     return;
   }
 
-  room.gameState.statusMessage = `プレイヤー ${room.gameState.currentSeat + 1} の手番です`;
+  room.gameState.statusMessage = formatTurnMessage(room, room.gameState.currentSeat, "の手番です");
 }
 
 export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number): void {
@@ -247,21 +247,21 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
   if (room.gameState.type === "janken") {
     room.gameState.phase = "finished";
     room.gameState.winnerSeats = remainingSeats;
-    room.gameState.resultMessage = formatWinnerMessage(remainingSeats, "不戦勝です");
+    room.gameState.resultMessage = formatWinnerMessage(room, remainingSeats, "不戦勝です");
     return;
   }
 
   if (room.gameState.type === "old-maid") {
     room.gameState.winnerSeats = remainingSeats;
     room.gameState.loserSeat = disconnectedSeat;
-    room.gameState.statusMessage = formatWinnerMessage(remainingSeats, "不戦勝です");
+    room.gameState.statusMessage = formatWinnerMessage(room, remainingSeats, "不戦勝です");
     return;
   }
 
   if (room.gameState.type === "sevens") {
     room.gameState.currentSeat = null;
     room.gameState.winnerSeats = remainingSeats;
-    room.gameState.statusMessage = formatWinnerMessage(remainingSeats, "不戦勝です");
+    room.gameState.statusMessage = formatWinnerMessage(room, remainingSeats, "不戦勝です");
     return;
   }
 
@@ -273,14 +273,14 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
       .filter((player) => player.team === winningTeam)
       .map((player) => player.seat)
       .sort((left, right) => left - right);
-    room.gameState.statusMessage = formatWinnerMessage(room.gameState.winnerSeats, "不戦勝です");
+    room.gameState.statusMessage = formatWinnerMessage(room, room.gameState.winnerSeats, "不戦勝です");
     return;
   }
 
   const winnerSeat = remainingSeats[0] ?? null;
   room.gameState.winnerSeat = winnerSeat;
   room.gameState.statusMessage =
-    winnerSeat === null ? "ルームを終了しました" : `プレイヤー ${winnerSeat + 1} の不戦勝です`;
+    winnerSeat === null ? "ルームを終了しました" : `${formatPlayerLabel(room, winnerSeat)} の不戦勝です`;
 }
 
 export function advanceAutomatedTurns(room: RoomRecord): void {
