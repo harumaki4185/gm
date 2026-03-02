@@ -111,7 +111,9 @@ export interface MahjongState {
   roundLabel: string;
   dealerSeat: number;
   currentSeat: number | null;
+  scores: number[];
   hands: string[][];
+  melds: MahjongMeld[][];
   discards: string[][];
   wall: string[];
   deadWall: string[];
@@ -120,6 +122,49 @@ export interface MahjongState {
   statusMessage: string;
   lastAction: string | null;
   finishReason: string | null;
+  pendingCall: MahjongPendingCall | null;
+  results: MahjongResult[];
+}
+
+export interface MahjongMeld {
+  type: "chi" | "pon" | "kan";
+  tiles: string[];
+  fromSeat: number | null;
+  calledTile: string | null;
+  open: boolean;
+}
+
+export interface MahjongRonPendingCall {
+  stage: "ron";
+  discardSeat: number;
+  discardTile: string;
+  eligibleSeats: number[];
+  acceptedSeats: number[];
+  passedSeats: number[];
+}
+
+export interface MahjongClaimPendingCall {
+  stage: "call";
+  seat: number;
+  discardSeat: number;
+  discardTile: string;
+  chiOptions: string[][];
+  ponOption: string[] | null;
+  kanOption: string[] | null;
+}
+
+export type MahjongPendingCall = MahjongRonPendingCall | MahjongClaimPendingCall;
+
+export interface MahjongResult {
+  winnerSeat: number;
+  sourceSeat: number | null;
+  winType: "tsumo" | "ron";
+  han: number;
+  fu: number;
+  total: number;
+  yaku: string[];
+  scoreDeltas: number[];
+  summary: string;
 }
 
 export interface PlannedState {

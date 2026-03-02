@@ -180,11 +180,13 @@ export interface SpadesView {
 export interface MahjongPlayerView {
   seat: number;
   name: string;
+  score: number;
   handCount: number;
   discardCount: number;
   isCurrent: boolean;
   isDealer: boolean;
   isWinner: boolean;
+  melds: MahjongMeldView[];
 }
 
 export interface MahjongDiscardView {
@@ -193,10 +195,42 @@ export interface MahjongDiscardView {
   tiles: string[];
 }
 
+export interface MahjongMeldView {
+  type: "chi" | "pon" | "kan";
+  tiles: string[];
+  fromSeat: number | null;
+  open: boolean;
+}
+
+export interface MahjongCallOptionView {
+  type: "ron" | "chi" | "pon" | "kan";
+  combinations: string[][];
+}
+
+export interface MahjongPendingCallView {
+  stage: "ron" | "call";
+  discardSeat: number;
+  discardTile: string;
+  options: MahjongCallOptionView[];
+}
+
+export interface MahjongResultView {
+  winnerSeat: number;
+  sourceSeat: number | null;
+  winType: "tsumo" | "ron";
+  han: number;
+  fu: number;
+  total: number;
+  yaku: string[];
+  scoreDeltas: number[];
+  summary: string;
+}
+
 export interface MahjongView {
   kind: "mahjong";
   phase: "playing" | "finished";
   canAct: boolean;
+  canTsumo: boolean;
   currentSeat: number | null;
   dealerSeat: number;
   roundLabel: string;
@@ -210,6 +244,8 @@ export interface MahjongView {
   selfHand: string[];
   players: MahjongPlayerView[];
   discards: MahjongDiscardView[];
+  pendingCall: MahjongPendingCallView | null;
+  results: MahjongResultView[];
 }
 
 export interface PlacementBoardView {
@@ -315,6 +351,20 @@ export type ClientAction =
   | {
       type: "mahjong_discard";
       tile: string;
+    }
+  | {
+      type: "mahjong_tsumo";
+    }
+  | {
+      type: "mahjong_ron";
+    }
+  | {
+      type: "mahjong_pass_call";
+    }
+  | {
+      type: "mahjong_call";
+      call: "chi" | "pon" | "kan";
+      tiles: string[];
     };
 
 export interface ActionRequest {

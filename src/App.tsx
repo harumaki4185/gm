@@ -614,7 +614,7 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
           <li>ババ抜き: 2 人から 4 人まで対応し、bot 補充も可能です。手番では前の席の伏せ札から 1 枚引きます。</li>
           <li>七並べ: 2 人から 4 人まで対応し、7 は自動で場に並びます。出せるカードがないときだけパスできます。</li>
           <li>スペード: 4 席固定の 2 対 2 戦です。全員がビッドした後に 13 トリックを行い、1 ハンドの得点で勝敗を決めます。</li>
-          <li>麻雀: 4 席固定の試作版です。現在は配牌、自摸、打牌、河表示、bot 進行まで対応しています。</li>
+          <li>麻雀: 4 席固定の試作版です。現在は配牌、自摸、打牌、ロン、チー、ポン、カン、簡易点数計算まで対応しています。</li>
         </ul>
         <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
           一覧へ戻る
@@ -667,9 +667,9 @@ function getGameRules(gameId: GameId): string[] {
       ];
     case "mahjong":
       return [
-        "4 人固定の卓です。現在は配牌、自摸、打牌、河表示までの基礎段階です。",
-        "親から打牌を始め、次の席が自動で自摸して手番を進めます。",
-        "役判定や鳴き、立直、点数計算はこれから段階的に追加します。"
+        "4 人固定の卓です。親から打牌を始め、次の席が自動で自摸して手番を進めます。",
+        "現在はツモ、ロン、チー、ポン、大明槓、簡易役判定、簡易点数計算まで入っています。",
+        "立直、フリテン、暗槓、加槓、局進行などはこれから追加します。"
       ];
     default:
       return [];
@@ -742,7 +742,13 @@ function resolvePlayerResultLabel(snapshot: RoomSnapshot, seat: number): string 
       if (gameView.winnerSeats.length === 0) {
         return "流局";
       }
-      return gameView.winnerSeats.includes(seat) ? "和了" : "敗北";
+      if (gameView.winnerSeats.includes(seat)) {
+        return "和了";
+      }
+      if (gameView.results.some((result) => result.winType === "ron" && result.sourceSeat === seat)) {
+        return "放銃";
+      }
+      return "敗北";
     case "old-maid":
       if (gameView.loserSeat === null) {
         return gameView.winnerSeats.length === 0 ? "引き分け" : gameView.winnerSeats.includes(seat) ? "勝利" : null;

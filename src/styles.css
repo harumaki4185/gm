@@ -746,6 +746,39 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.mahjong-result,
+.mahjong-call-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.56);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.mahjong-result-stack,
+.mahjong-result__scores,
+.mahjong-actions,
+.mahjong-melds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mahjong-result-stack {
+  flex-direction: column;
+}
+
+.mahjong-meld {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: rgba(29, 26, 23, 0.06);
+  padding: 6px 10px;
+  font-size: 0.86rem;
+}
+
 .mahjong-river__header {
   display: flex;
   justify-content: space-between;

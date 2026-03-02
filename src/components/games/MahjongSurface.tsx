@@ -1,5 +1,5 @@
 import { formatMahjongTile, getMahjongTileSuit } from "../../shared/mahjong";
-import type { ClientAction, MahjongView } from "../../shared/types";
+import type { ClientAction, MahjongCallOptionView, MahjongView } from "../../shared/types";
 
 interface MahjongSurfaceProps {
   view: MahjongView;
@@ -45,11 +45,47 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
               {player.name}
               {player.isDealer ? " / 親" : ""}
             </strong>
+            <span>{player.score.toLocaleString()} 点</span>
             <span>手牌 {player.handCount} 枚</span>
             <span>河 {player.discardCount} 枚</span>
+            {player.melds.length > 0 ? (
+              <div className="mahjong-melds">
+                {player.melds.map((meld, index) => (
+                  <div className="mahjong-meld" key={`${player.seat}-${meld.type}-${index}`}>
+                    <span>{labelForMeld(meld.type)}</span>
+                    <strong>{meld.tiles.join(" ")}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
+
+      {view.results.length > 0 ? (
+        <div className="mahjong-result-stack">
+          {view.results.map((result, index) => (
+            <div className="mahjong-result" key={`${result.winnerSeat}-${result.sourceSeat ?? "tsumo"}-${index}`}>
+              <strong>{result.summary}</strong>
+              <span>
+                {result.han} 翻 / {result.fu} 符 / 役: {result.yaku.join(" / ")}
+              </span>
+              <div className="mahjong-result__scores">
+                {view.players.map((player) => {
+                  const delta = result.scoreDeltas[player.seat] ?? 0;
+                  const sign = delta > 0 ? "+" : "";
+                  return (
+                    <span key={`${player.seat}-delta-${index}`}>
+                      {player.name}: {sign}
+                      {delta}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mahjong-rivers">
         {view.discards.map((river) => (
@@ -79,26 +115,96 @@ export function MahjongSurface({ view, onAction, isSpectator }: MahjongSurfacePr
           <strong>{isSpectator ? "Hidden" : `${view.selfHand.length} 枚`}</strong>
         </div>
         {view.finishReason ? <p className="surface-status">{view.finishReason}</p> : null}
+
         {isSpectator ? (
           <p className="surface-status">観戦中は非公開の手牌情報を表示しません。</p>
         ) : (
-          <div className="mahjong-hand">
-            {view.selfHand.map((tile) => (
-              <button
-                className={getMahjongTileClass(tile)}
-                disabled={!view.canAct}
-                key={tile}
-                onClick={() => onAction({ type: "mahjong_discard", tile })}
-                title={view.canAct ? "この牌を打牌する" : "現在は打牌できません"}
-              >
-                {formatMahjongTile(tile)}
-              </button>
-            ))}
-          </div>
+          <>
+            {view.canTsumo ? (
+              <div className="mahjong-actions">
+                <button className="primary-button" onClick={() => onAction({ type: "mahjong_tsumo" })}>
+                  ツモ
+                </button>
+              </div>
+            ) : null}
+
+            {view.pendingCall ? (
+              <div className="mahjong-actions">
+                <p className="surface-status">打牌 {formatMahjongTile(view.pendingCall.discardTile)} に反応できます。</p>
+                {view.pendingCall.options.map((option) => (
+                  <div className="mahjong-call-group" key={option.type}>
+                    <strong>{labelForMeld(option.type === "ron" ? "ron" : option.type)}</strong>
+                    <div className="mahjong-actions">
+                      {renderCallButtons(option, onAction)}
+                    </div>
+                  </div>
+                ))}
+                <button className="ghost-button" onClick={() => onAction({ type: "mahjong_pass_call" })}>
+                  見送る
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mahjong-hand">
+              {view.selfHand.map((tile) => (
+                <button
+                  className={getMahjongTileClass(tile)}
+                  disabled={!view.canAct || view.pendingCall !== null}
+                  key={tile}
+                  onClick={() => onAction({ type: "mahjong_discard", tile })}
+                  title={view.canAct && view.pendingCall === null ? "この牌を打牌する" : "現在は打牌できません"}
+                >
+                  {formatMahjongTile(tile)}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </section>
   );
+}
+
+function renderCallButtons(
+  option: MahjongCallOptionView,
+  onAction: (action: ClientAction) => void
+) {
+  if (option.type === "ron") {
+    return [
+      <button className="primary-button" key="ron" onClick={() => onAction({ type: "mahjong_ron" })}>
+        ロン
+      </button>
+    ];
+  }
+
+  return option.combinations.map((combination) => (
+    <button
+      className="ghost-button"
+      key={`${option.type}-${combination.join("-")}`}
+      onClick={() =>
+        onAction({
+          type: "mahjong_call",
+          call: option.type,
+          tiles: combination
+        })
+      }
+    >
+      {labelForMeld(option.type)} {combination.map((tile) => formatMahjongTile(tile)).join(" ")}
+    </button>
+  ));
+}
+
+function labelForMeld(type: "chi" | "pon" | "kan" | "ron"): string {
+  switch (type) {
+    case "chi":
+      return "チー";
+    case "pon":
+      return "ポン";
+    case "kan":
+      return "カン";
+    case "ron":
+      return "ロン";
+  }
 }
 
 function getMahjongTileClass(tile: string): string {
