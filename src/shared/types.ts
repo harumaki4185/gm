@@ -53,6 +53,7 @@ export interface WaitingView {
   kind: "waiting";
   message: string;
   joinedHumans: number;
+  connectedHumans: number;
   totalSeats: number;
   botCount: number;
   supportsBots: boolean;

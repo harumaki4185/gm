@@ -22,11 +22,7 @@ export function WaitingSurface({
   const isHost = Boolean(selfPlayer?.isHost);
   const variableSeats = view.minSeats !== view.maxSeats;
   const availableBotSeats = Math.max(0, view.totalSeats - view.joinedHumans);
-  const botOptions = view.supportsBots
-    ? variableSeats
-      ? Array.from({ length: availableBotSeats + 1 }, (_, index) => index)
-      : [...new Set([0, availableBotSeats])]
-    : [0];
+  const botOptions = view.supportsBots ? Array.from({ length: availableBotSeats + 1 }, (_, index) => index) : [0];
 
   return (
     <section className="surface-card">
@@ -35,7 +31,9 @@ export function WaitingSurface({
       <div className="waiting-stats">
         <div>
           <span>参加中の人間</span>
-          <strong>{view.joinedHumans} 人</strong>
+          <strong>
+            {view.joinedHumans} 人 / 接続中 {view.connectedHumans} 人
+          </strong>
         </div>
         <div>
           <span>待機中の席数</span>
@@ -64,8 +62,8 @@ export function WaitingSurface({
                 }
                 value={view.totalSeats}
               >
-                {Array.from({ length: view.maxSeats - Math.max(view.minSeats, view.joinedHumans) + 1 }, (_, index) => {
-                  const value = Math.max(view.minSeats, view.joinedHumans) + index;
+                {Array.from({ length: Math.max(0, view.maxSeats - Math.max(view.minSeats, view.joinedHumans) + 1) }, (_, index) => {
+                  const value = Math.min(view.maxSeats, Math.max(view.minSeats, view.joinedHumans)) + index;
                   return (
                     <option key={value} value={value}>
                       {value} 人
@@ -105,6 +103,10 @@ export function WaitingSurface({
 }
 
 function buildWaitingHint(view: WaitingView): string {
+  if (view.connectedHumans < view.joinedHumans) {
+    return "切断中の参加者がいるため開始できません。再接続を待つか、別名で参加し直してください。";
+  }
+
   if (view.joinedHumans < view.minHumanPlayers) {
     return `開始には人間プレイヤーが最低 ${view.minHumanPlayers} 人必要です。`;
   }

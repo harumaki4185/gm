@@ -67,7 +67,7 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     defaultSeats: 4,
     minSeats: 2,
     maxSeats: 4,
-    minHumanPlayers: 2,
+    minHumanPlayers: 1,
     supportsBots: true,
     accent: "#5e3ab3"
   },
@@ -81,7 +81,7 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     defaultSeats: 4,
     minSeats: 2,
     maxSeats: 4,
-    minHumanPlayers: 2,
+    minHumanPlayers: 1,
     supportsBots: true,
     accent: "#1d6fd6"
   },
@@ -89,13 +89,13 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     id: "spades",
     title: "スペード",
     shortDescription: "2 対 2 のビッド制トリックテイキング。",
-    description: "4 席固定で遊ぶペア戦トランプゲーム。2 人集まれば bot を補充して開始できる。",
+    description: "4 席固定で遊ぶペア戦トランプゲーム。待機中に bot を補充して開始できる。",
     category: "card",
     availability: "active",
     defaultSeats: 4,
     minSeats: 4,
     maxSeats: 4,
-    minHumanPlayers: 2,
+    minHumanPlayers: 1,
     supportsBots: true,
     accent: "#101820"
   }

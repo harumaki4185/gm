@@ -42,6 +42,7 @@ export interface JankenState {
   phase: "playing" | "finished";
   round: number;
   selections: Array<JankenChoice | null>;
+  revealedSelections: Array<JankenChoice | null> | null;
   winnerSeats: number[];
   resultMessage: string | null;
 }

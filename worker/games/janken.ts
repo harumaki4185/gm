@@ -11,13 +11,18 @@ export function createJankenState(seatCount: number): JankenState {
     phase: "playing",
     round: 1,
     selections: Array.from({ length: seatCount }, () => null),
+    revealedSelections: null,
     winnerSeats: [],
     resultMessage: "手を選んでください"
   };
 }
 
 export function buildJankenView(room: RoomRecord, state: JankenState, selfSeat: number | null): JankenView {
-  const selections = state.selections.map((choice, index) => {
+  const displaySelections =
+    state.phase === "finished" || state.selections.some((choice) => choice !== null)
+      ? state.selections
+      : state.revealedSelections ?? state.selections;
+  const selections = displaySelections.map((choice, index) => {
     if (state.phase === "finished") {
       return choice;
     }
@@ -65,6 +70,7 @@ export function applyJankenAction(room: RoomRecord, seat: number, action: Client
     throw new AppError("すでに手を選択済みです", 409);
   }
 
+  state.revealedSelections = null;
   state.selections[seat] = action.choice;
   resolveJankenState(room, state);
 }
@@ -104,6 +110,7 @@ function resolveJankenState(room: RoomRecord, state: JankenState): void {
 
   const winnerSeats = resolveJanken(state.selections as JankenChoice[]);
   if (winnerSeats.length === 0) {
+    state.revealedSelections = [...state.selections];
     state.round += 1;
     state.selections = Array.from({ length: state.selections.length }, () => null);
     state.winnerSeats = [];
@@ -112,6 +119,7 @@ function resolveJankenState(room: RoomRecord, state: JankenState): void {
   }
 
   state.phase = "finished";
+  state.revealedSelections = [...state.selections];
   state.winnerSeats = winnerSeats;
   state.resultMessage = formatWinnerMessage(room, winnerSeats, "勝ちです");
   room.roomStatus = "finished";

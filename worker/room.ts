@@ -622,10 +622,15 @@ function getStartBotCount(room: RoomRecord): number {
 
 function canStartRoom(room: RoomRecord): boolean {
   const game = GAME_MAP[room.gameId];
-  const humanPlayers = getHumanPlayers(room).length;
-  const startSeatCount = humanPlayers + getStartBotCount(room);
+  const humanPlayers = getHumanPlayers(room);
+  const connectedHumans = humanPlayers.filter((player) => player.connected).length;
+  const startSeatCount = humanPlayers.length + getStartBotCount(room);
 
-  if (humanPlayers < game.minHumanPlayers) {
+  if (humanPlayers.length < game.minHumanPlayers) {
+    return false;
+  }
+
+  if (connectedHumans !== humanPlayers.length) {
     return false;
   }
 

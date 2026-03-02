@@ -119,11 +119,15 @@ export function applyGameAction(room: RoomRecord, seat: number, action: ClientAc
 export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
   const game = GAME_MAP[room.gameId];
   const joinedHumans = room.players.filter((player) => player.playerType === "human").length;
+  const connectedHumans = room.players.filter(
+    (player) => player.playerType === "human" && player.connected
+  ).length;
   const availableBotSlots = Math.max(0, room.settings.seatCount - joinedHumans);
   const botCount = game.supportsBots ? Math.min(room.settings.botCount, availableBotSlots) : 0;
   const startPlayerCount = joinedHumans + botCount;
   const canStart =
     joinedHumans >= game.minHumanPlayers &&
+    connectedHumans === joinedHumans &&
     startPlayerCount >= game.minSeats &&
     startPlayerCount <= game.maxSeats &&
     (game.minSeats !== game.maxSeats || startPlayerCount === game.maxSeats);
@@ -133,6 +137,7 @@ export function buildView(room: RoomRecord, selfSeat: number | null): GameView {
       kind: "waiting",
       message: "参加プレイヤーを待っています。",
       joinedHumans,
+      connectedHumans,
       totalSeats: room.settings.seatCount,
       botCount,
       supportsBots: game.supportsBots,
