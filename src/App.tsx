@@ -5,8 +5,7 @@ import { parseRoute, toPath, type Route } from "./router";
 import {
   GAME_CATALOG,
   GAME_MAP,
-  getDefaultRoomSettings,
-  supportsVariableSeats
+  getDefaultRoomSettings
 } from "./shared/games";
 import type {
   ActionRequest,
@@ -17,6 +16,7 @@ import type {
   JoinRoomRequest,
   ReconnectRoomRequest,
   RematchRequest,
+  StartRoomRequest,
   RoomSettings,
   RoomMutationResponse,
   RoomSnapshot,
@@ -59,10 +59,31 @@ export default function App() {
 
 function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
   const [playerName, setPlayerName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
+  const [pendingGameId, setPendingGameId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     writeStorage(PLAYER_NAME_KEY, playerName);
   }, [playerName]);
+
+  const createRoom = async (gameId: CreateRoomRequest["gameId"]) => {
+    if (playerName.trim().length < 2) {
+      setError("表示名は 2 文字以上で入力してください。");
+      return;
+    }
+
+    setPendingGameId(gameId);
+    setError(null);
+
+    try {
+      const payload = await createRoomOnServer(gameId, playerName, getDefaultRoomSettings(gameId));
+      navigate({ kind: "room", roomId: payload.snapshot.roomId });
+    } catch (requestError) {
+      setError(getMessage(requestError));
+    } finally {
+      setPendingGameId(null);
+    }
+  };
 
   return (
     <main className="layout">
@@ -89,14 +110,17 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
           <button className="ghost-button" onClick={() => navigate({ kind: "help" })}>
             ルールとヘルプ
           </button>
+          {error ? <p className="inline-error">{error}</p> : null}
         </div>
       </section>
 
       <section className="catalog">
         {GAME_CATALOG.map((game) => (
           <GameCard
+            busy={pendingGameId === game.id}
             game={game}
             key={game.id}
+            onCreate={createRoom}
             onOpenDetails={(gameId) => navigate({ kind: "game", gameId })}
           />
         ))}
@@ -118,6 +142,7 @@ function RoomPage({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [waitingSettingsBusy, setWaitingSettingsBusy] = useState(false);
+  const [waitingStartBusy, setWaitingStartBusy] = useState(false);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [socketRevision, setSocketRevision] = useState(0);
   const skipNextReconnectRef = useRef(false);
@@ -303,7 +328,7 @@ function RoomPage({
     }
   };
 
-  const updateWaitingBots = async (fillWithBots: boolean) => {
+  const updateWaitingSettings = async (settings: Partial<RoomSettings>) => {
     if (!sessionId) {
       return;
     }
@@ -315,7 +340,7 @@ function RoomPage({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sessionId,
-          settings: { fillWithBots }
+          settings
         } satisfies UpdateRoomSettingsRequest)
       });
       const payload = await parseResponse<RoomSnapshot>(response);
@@ -324,6 +349,27 @@ function RoomPage({
       setError(getMessage(requestError));
     } finally {
       setWaitingSettingsBusy(false);
+    }
+  };
+
+  const startWaitingRoom = async () => {
+    if (!sessionId) {
+      return;
+    }
+    setWaitingStartBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/start`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId } satisfies StartRoomRequest)
+      });
+      const payload = await parseResponse<RoomSnapshot>(response);
+      setSnapshot(payload);
+    } catch (requestError) {
+      setError(getMessage(requestError));
+    } finally {
+      setWaitingStartBusy(false);
     }
   };
 
@@ -384,9 +430,7 @@ function RoomPage({
                   <span>
                     {player.name}
                     {player.seat === currentSeat ? " / 手番" : ""}
-                    {resolveSevensPlacement(snapshot.gameView, player.seat) !== null
-                      ? ` / ${resolveSevensPlacement(snapshot.gameView, player.seat)}位`
-                      : ""}
+                    {resolvePlayerResultLabel(snapshot, player.seat) ? ` / ${resolvePlayerResultLabel(snapshot, player.seat)}` : ""}
                     {snapshot.rematchVotes.includes(player.seat) ? " / 再戦投票済み" : ""}
                   </span>
                   <strong>
@@ -442,9 +486,11 @@ function RoomPage({
           ) : snapshot ? (
             <GameSurface
               onAction={sendAction}
-              onWaitingBotsChange={updateWaitingBots}
+              onStartWaitingRoom={startWaitingRoom}
+              onWaitingSettingsChange={updateWaitingSettings}
               snapshot={snapshot}
               waitingSettingsBusy={waitingSettingsBusy}
+              waitingStartBusy={waitingStartBusy}
             />
           ) : (
             <div className="join-card">
@@ -466,10 +512,7 @@ function GameDetailPage({
   navigate: (route: Route) => void;
 }) {
   const game = GAME_MAP[gameId];
-  const defaultSettings = getDefaultRoomSettings(gameId);
   const [playerName, setPlayerName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
-  const [seatCount, setSeatCount] = useState(defaultSettings.seatCount);
-  const [fillWithBots, setFillWithBots] = useState(defaultSettings.fillWithBots);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!game) {
@@ -494,10 +537,7 @@ function GameDetailPage({
     setPending(true);
     setError(null);
     try {
-      const payload = await createRoomOnServer(gameId, playerName, {
-        seatCount,
-        fillWithBots
-      });
+      const payload = await createRoomOnServer(gameId, playerName, getDefaultRoomSettings(gameId));
       navigate({ kind: "room", roomId: payload.snapshot.roomId });
     } catch (requestError) {
       setError(getMessage(requestError));
@@ -526,6 +566,14 @@ function GameDetailPage({
             <dd>{game.supportsBots ? "あり" : "なし"}</dd>
           </div>
         </dl>
+        <div className="detail-rules">
+          <h2>かんたんルール</h2>
+          <ul className="help-list">
+            {getGameRules(gameId).map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
         <label className="field">
           <span>表示名</span>
           <input
@@ -535,34 +583,13 @@ function GameDetailPage({
             value={playerName}
           />
         </label>
-        {supportsVariableSeats(gameId) ? (
-          <label className="field">
-            <span>ルーム人数</span>
-            <select onChange={(event) => setSeatCount(Number(event.target.value))} value={seatCount}>
-              {Array.from({ length: game.maxSeats - game.minSeats + 1 }, (_, index) => {
-                const value = game.minSeats + index;
-                return (
-                  <option key={value} value={value}>
-                    {value} 人
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-        ) : null}
-        {game.supportsBots ? (
-          <label className="checkbox-field">
-            <input checked={fillWithBots} onChange={(event) => setFillWithBots(event.target.checked)} type="checkbox" />
-            <span>不足席を bot で補充して開始する</span>
-          </label>
-        ) : null}
         {error ? <p className="inline-error">{error}</p> : null}
         <div className="detail-card__actions">
           <button className="ghost-button" onClick={() => navigate({ kind: "home" })}>
             一覧へ戻る
           </button>
           <button className="primary-button" disabled={pending || game.availability !== "active"} onClick={() => void createRoom()}>
-            ルーム作成へ
+            ルームを作成
           </button>
         </div>
       </section>
@@ -594,6 +621,52 @@ function HelpPage({ navigate }: { navigate: (route: Route) => void }) {
       </section>
     </main>
   );
+}
+
+function getGameRules(gameId: GameId): string[] {
+  switch (gameId) {
+    case "othello":
+      return [
+        "自分の石で相手の石を挟める場所にだけ置けます。",
+        "置ける場所がないときは自動でパスになります。",
+        "最後に石が多いプレイヤーの勝ちです。"
+      ];
+    case "gomoku":
+      return [
+        "15x15 盤に交互に石を置きます。",
+        "縦横斜めのどこかで先に 5 連を作ったプレイヤーの勝ちです。"
+      ];
+    case "connect4":
+      return [
+        "列を選ぶとディスクが一番下まで落ちます。",
+        "縦横斜めのどこかで先に 4 連を作ったプレイヤーの勝ちです。"
+      ];
+    case "janken":
+      return [
+        "全員が同時にグー・チョキ・パーを選びます。",
+        "勝ち手が複数人いれば同時勝利、全員ばらけたら次ラウンドです。"
+      ];
+    case "old-maid":
+      return [
+        "同じ数字のペアは自動で捨てられます。",
+        "手番では前の席の相手から 1 枚引きます。",
+        "最後にジョーカーを持っていたプレイヤーの負けです。"
+      ];
+    case "sevens":
+      return [
+        "7 は最初から場に出ていて、同じマークでつながるカードだけ出せます。",
+        "出せるカードがないときだけパスできます。",
+        "手札を出し切った順に順位が決まります。"
+      ];
+    case "spades":
+      return [
+        "4 人固定の 2 対 2 戦で、最初に全員がビッドします。",
+        "出されたマークがあればそのマークを優先して出します。",
+        "13 トリック終了後、チーム得点が高い側の勝ちです。"
+      ];
+    default:
+      return [];
+  }
 }
 
 function resolveGameTitle(gameId: RoomSnapshot["gameId"]): string {
@@ -636,6 +709,41 @@ function resolveSevensPlacement(gameView: RoomSnapshot["gameView"], seat: number
   }
   const player = gameView.players.find((entry) => entry.seat === seat);
   return player?.placement ?? null;
+}
+
+function resolvePlayerResultLabel(snapshot: RoomSnapshot, seat: number): string | null {
+  const gameView = snapshot.gameView;
+  if (snapshot.roomStatus !== "finished") {
+    return resolveSevensPlacement(gameView, seat) !== null ? `${resolveSevensPlacement(gameView, seat)}位` : null;
+  }
+
+  const sevensPlacement = resolveSevensPlacement(gameView, seat);
+  if (sevensPlacement !== null) {
+    return `${sevensPlacement}位`;
+  }
+
+  switch (gameView.kind) {
+    case "janken":
+    case "spades":
+      if (gameView.winnerSeats.length === 0) {
+        return "引き分け";
+      }
+      return gameView.winnerSeats.includes(seat) ? "勝利" : "敗北";
+    case "old-maid":
+      if (gameView.loserSeat === null) {
+        return gameView.winnerSeats.length === 0 ? "引き分け" : gameView.winnerSeats.includes(seat) ? "勝利" : null;
+      }
+      return gameView.loserSeat === seat ? "敗北" : "勝利";
+    case "gomoku":
+    case "othello":
+    case "connect4":
+      if (gameView.winnerSeat === null) {
+        return "引き分け";
+      }
+      return gameView.winnerSeat === seat ? "勝利" : "敗北";
+    default:
+      return null;
+  }
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

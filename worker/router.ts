@@ -82,7 +82,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       action === "reconnect" ||
       action === "actions" ||
       action === "rematch" ||
-      action === "settings"
+      action === "settings" ||
+      action === "start"
     ) {
       return stub.fetch(`https://room.internal/${action}`, {
         method: "POST",

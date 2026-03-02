@@ -118,13 +118,13 @@ export function getDefaultRoomSettings(gameId: GameId): RoomSettings {
   const game = GAME_MAP[gameId] as GameCatalogEntry | undefined;
   if (!game) {
     return {
-      fillWithBots: false,
-      seatCount: 2
+      seatCount: 2,
+      botCount: 0
     };
   }
   return {
-    fillWithBots: false,
-    seatCount: game.defaultSeats
+    seatCount: game.defaultSeats,
+    botCount: 0
   };
 }
 
@@ -132,19 +132,20 @@ export function normalizeRoomSettings(gameId: GameId, settings?: Partial<RoomSet
   const game = GAME_MAP[gameId] as GameCatalogEntry | undefined;
   if (!game) {
     return {
-      fillWithBots: false,
-      seatCount: 2
+      seatCount: 2,
+      botCount: 0
     };
   }
   const requestedSeatCount = Number.isFinite(settings?.seatCount)
     ? Math.trunc(settings?.seatCount ?? game.defaultSeats)
     : game.defaultSeats;
   const seatCount = Math.min(game.maxSeats, Math.max(game.minSeats, requestedSeatCount));
-  const requestedFillWithBots =
-    typeof settings?.fillWithBots === "boolean" ? settings.fillWithBots : false;
+  const requestedBotCount = Number.isFinite(settings?.botCount)
+    ? Math.max(0, Math.trunc(settings?.botCount ?? 0))
+    : 0;
 
   return {
-    fillWithBots: game.supportsBots ? requestedFillWithBots : false,
-    seatCount
+    seatCount,
+    botCount: game.supportsBots ? Math.min(requestedBotCount, seatCount - game.minHumanPlayers) : 0
   };
 }

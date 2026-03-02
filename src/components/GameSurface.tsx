@@ -1,5 +1,5 @@
 import { GAME_MAP } from "../shared/games";
-import type { ClientAction, RoomSnapshot } from "../shared/types";
+import type { ClientAction, RoomSettings, RoomSnapshot } from "../shared/types";
 import { BoardSurface } from "./games/BoardSurface";
 import { JankenSurface } from "./games/JankenSurface";
 import { OldMaidSurface } from "./games/OldMaidSurface";
@@ -11,15 +11,19 @@ import { WaitingSurface } from "./games/WaitingSurface";
 interface GameSurfaceProps {
   snapshot: RoomSnapshot;
   onAction: (action: ClientAction) => void;
-  onWaitingBotsChange?: (fillWithBots: boolean) => void;
+  onWaitingSettingsChange?: (settings: Partial<RoomSettings>) => void;
+  onStartWaitingRoom?: () => void;
   waitingSettingsBusy?: boolean;
+  waitingStartBusy?: boolean;
 }
 
 export function GameSurface({
   snapshot,
   onAction,
-  onWaitingBotsChange,
-  waitingSettingsBusy = false
+  onWaitingSettingsChange,
+  onStartWaitingRoom,
+  waitingSettingsBusy = false,
+  waitingStartBusy = false
 }: GameSurfaceProps) {
   const view = snapshot.gameView;
   const isSpectator = snapshot.selfSeat === null && snapshot.roomStatus !== "waiting";
@@ -27,10 +31,12 @@ export function GameSurface({
   if (view.kind === "waiting") {
     return (
       <WaitingSurface
-        onWaitingBotsChange={onWaitingBotsChange}
+        onStartWaitingRoom={onStartWaitingRoom}
+        onWaitingSettingsChange={onWaitingSettingsChange}
         snapshot={snapshot}
         view={view}
         waitingSettingsBusy={waitingSettingsBusy}
+        waitingStartBusy={waitingStartBusy}
       />
     );
   }

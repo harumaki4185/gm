@@ -8,6 +8,7 @@ import type {
   RematchRequest,
   RoomMutationResponse,
   RoomSnapshot,
+  StartRoomRequest,
   UpdateRoomSettingsRequest
 } from "../src/shared/types";
 import { AppError, assert } from "./errors";
@@ -66,6 +67,10 @@ export class RoomDurableObject {
 
       if (url.pathname === "/settings" && request.method === "POST") {
         return this.handleUpdateSettings((await request.json()) as UpdateRoomSettingsRequest);
+      }
+
+      if (url.pathname === "/start" && request.method === "POST") {
+        return this.handleStart((await request.json()) as StartRoomRequest);
       }
 
       if (url.pathname === "/state" && request.method === "GET") {
@@ -165,7 +170,7 @@ export class RoomDurableObject {
       }
     };
 
-    maybeStartRoom(room);
+    room.settings = clampWaitingSettings(room, room.settings);
     await this.saveRoom(room);
     await this.syncAlarm(room.lifecycleAlarm);
     return json<RoomMutationResponse>({
@@ -212,7 +217,7 @@ export class RoomDurableObject {
       team: resolveTeam(room.gameId, seat)
     });
 
-    maybeStartRoom(room);
+    room.settings = clampWaitingSettings(room, room.settings);
     room.updatedAt = nowIso();
     await this.saveRoom(room);
     await this.syncAlarm(room.lifecycleAlarm);
@@ -314,18 +319,26 @@ export class RoomDurableObject {
     assert(actor.isHost, "ルーム設定を変更できるのはホストだけです", 403);
     assert(room.roomStatus === "waiting", "ルーム設定は開始前のみ変更できます", 409);
 
-    const game = GAME_MAP[room.gameId];
-    assert(game.supportsBots, "このゲームでは bot 補充を変更できません", 409);
-
-    const humanPlayerCount = room.players.filter((player) => player.playerType === "human").length;
-    const nextSettings = normalizeRoomSettings(room.gameId, {
+    room.settings = clampWaitingSettings(room, {
       ...room.settings,
       ...body.settings
     });
-    assert(nextSettings.seatCount >= humanPlayerCount, "現在の参加人数より少ない席数にはできません", 409);
+    room.updatedAt = nowIso();
+    await this.saveRoom(room);
+    await this.syncAlarm(room.lifecycleAlarm);
+    await this.broadcastRoom(room);
 
-    room.settings = nextSettings;
-    maybeStartRoom(room);
+    return json(this.makeSnapshot(room, body.sessionId));
+  }
+
+  private async handleStart(body: StartRoomRequest): Promise<Response> {
+    const room = await this.requireRoom();
+    const actor = room.players.find((player) => player.sessionId === body.sessionId);
+    assert(actor && actor.playerType === "human", "操作権限がありません", 403);
+    assert(actor.isHost, "試合を開始できるのはホストだけです", 403);
+    assert(room.roomStatus === "waiting", "試合開始は待機中のみ可能です", 409);
+
+    startRoom(room);
     room.updatedAt = nowIso();
     await this.saveRoom(room);
     await this.syncAlarm(room.lifecycleAlarm);
@@ -578,17 +591,69 @@ export class RoomDurableObject {
   }
 }
 
-function maybeStartRoom(room: RoomRecord): void {
+function getHumanPlayers(room: RoomRecord): StoredParticipant[] {
+  return room.players.filter((player) => player.playerType === "human");
+}
+
+function clampWaitingSettings(
+  room: RoomRecord,
+  settings: RoomRecord["settings"]
+): RoomRecord["settings"] {
   const game = GAME_MAP[room.gameId];
-  const humanPlayers = room.players.filter((player) => player.playerType === "human");
-  const requiredHumans =
-    room.settings.fillWithBots && game.supportsBots ? game.minHumanPlayers : room.settings.seatCount;
-  if (humanPlayers.length < requiredHumans) {
-    return;
+  const normalized = normalizeRoomSettings(room.gameId, settings);
+  const humanPlayerCount = getHumanPlayers(room).length;
+  const seatCount = Math.max(humanPlayerCount, normalized.seatCount);
+  const maxBotCount = game.supportsBots ? Math.max(0, seatCount - humanPlayerCount) : 0;
+
+  return {
+    seatCount,
+    botCount: Math.min(normalized.botCount, maxBotCount)
+  };
+}
+
+function getStartBotCount(room: RoomRecord): number {
+  const game = GAME_MAP[room.gameId];
+  if (!game.supportsBots) {
+    return 0;
   }
 
-  if (room.settings.seatCount > room.players.length && room.settings.fillWithBots && game.supportsBots) {
+  return Math.min(room.settings.botCount, Math.max(0, room.settings.seatCount - getHumanPlayers(room).length));
+}
+
+function canStartRoom(room: RoomRecord): boolean {
+  const game = GAME_MAP[room.gameId];
+  const humanPlayers = getHumanPlayers(room).length;
+  const startSeatCount = humanPlayers + getStartBotCount(room);
+
+  if (humanPlayers < game.minHumanPlayers) {
+    return false;
+  }
+
+  if (startSeatCount < game.minSeats || startSeatCount > game.maxSeats) {
+    return false;
+  }
+
+  if (game.minSeats === game.maxSeats && startSeatCount !== game.maxSeats) {
+    return false;
+  }
+
+  return true;
+}
+
+function startRoom(room: RoomRecord): void {
+  assert(canStartRoom(room), "現在の人数と bot 設定では開始できません", 409);
+
+  const humanPlayers = getHumanPlayers(room);
+  const botCount = getStartBotCount(room);
+  const startSeatCount = humanPlayers.length + botCount;
+  room.players = [...humanPlayers];
+
+  if (botCount > 0) {
+    let added = 0;
     for (let seat = 0; seat < room.settings.seatCount; seat += 1) {
+      if (added >= botCount) {
+        break;
+      }
       const taken = room.players.some((player) => player.seat === seat);
       if (taken) {
         continue;
@@ -603,12 +668,17 @@ function maybeStartRoom(room: RoomRecord): void {
         isHost: false,
         team: resolveTeam(room.gameId, seat)
       });
+      added += 1;
     }
   }
 
+  room.settings = {
+    seatCount: startSeatCount,
+    botCount
+  };
   room.roomStatus = "playing";
   room.rematchVotes = [];
-  room.gameState = createInitialGameState(room.gameId, room.settings.seatCount);
+  room.gameState = createInitialGameState(room.gameId, startSeatCount);
   room.roomStatus = getRoomStatusFromState(room.gameState);
   if (room.roomStatus === "playing") {
     resumeGameAfterReconnect(room);

@@ -30,8 +30,8 @@ export interface GameCatalogEntry {
 }
 
 export interface RoomSettings {
-  fillWithBots: boolean;
   seatCount: number;
+  botCount: number;
 }
 
 export interface ParticipantSummary {
@@ -52,11 +52,15 @@ export interface BoardPosition {
 export interface WaitingView {
   kind: "waiting";
   message: string;
-  requiredHumans: number;
-  connectedHumans: number;
+  joinedHumans: number;
   totalSeats: number;
+  botCount: number;
   supportsBots: boolean;
-  fillWithBots: boolean;
+  minSeats: number;
+  maxSeats: number;
+  minHumanPlayers: number;
+  startPlayerCount: number;
+  canStart: boolean;
 }
 
 export interface PlannedView {
@@ -283,6 +287,10 @@ export interface RematchRequest {
 export interface UpdateRoomSettingsRequest {
   sessionId: string;
   settings: Partial<RoomSettings>;
+}
+
+export interface StartRoomRequest {
+  sessionId: string;
 }
 
 export interface ApiErrorBody {

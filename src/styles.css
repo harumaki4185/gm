@@ -393,6 +393,10 @@ button {
   gap: 12px;
 }
 
+.waiting-controls .primary-button {
+  align-self: flex-start;
+}
+
 .janken-slots {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -709,6 +713,17 @@ button {
 
 .detail-card {
   max-width: 880px;
+}
+
+.detail-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-rules h2 {
+  margin: 0;
+  font-size: 1.3rem;
 }
 
 .help-list {

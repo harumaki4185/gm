@@ -1,21 +1,32 @@
-import type { RoomSnapshot, WaitingView } from "../../shared/types";
+import type { RoomSettings, RoomSnapshot, WaitingView } from "../../shared/types";
 
 export function WaitingSurface({
   snapshot,
   view,
-  onWaitingBotsChange,
-  waitingSettingsBusy
+  onWaitingSettingsChange,
+  onStartWaitingRoom,
+  waitingSettingsBusy,
+  waitingStartBusy
 }: {
   snapshot: RoomSnapshot;
   view: WaitingView;
-  onWaitingBotsChange?: (fillWithBots: boolean) => void;
+  onWaitingSettingsChange?: (settings: Partial<RoomSettings>) => void;
+  onStartWaitingRoom?: () => void;
   waitingSettingsBusy: boolean;
+  waitingStartBusy: boolean;
 }) {
   const selfPlayer =
     snapshot.selfPlayerId === null
       ? null
       : snapshot.players.find((player) => player.id === snapshot.selfPlayerId) ?? null;
-  const canConfigureBots = Boolean(selfPlayer?.isHost && view.supportsBots && onWaitingBotsChange);
+  const isHost = Boolean(selfPlayer?.isHost);
+  const variableSeats = view.minSeats !== view.maxSeats;
+  const availableBotSeats = Math.max(0, view.totalSeats - view.joinedHumans);
+  const botOptions = view.supportsBots
+    ? variableSeats
+      ? Array.from({ length: availableBotSeats + 1 }, (_, index) => index)
+      : [...new Set([0, availableBotSeats])]
+    : [0];
 
   return (
     <section className="surface-card">
@@ -23,36 +34,88 @@ export function WaitingSurface({
       <p>{view.message}</p>
       <div className="waiting-stats">
         <div>
-          <span>人間プレイヤー</span>
-          <strong>
-            {view.connectedHumans} / {view.requiredHumans}
-          </strong>
+          <span>参加中の人間</span>
+          <strong>{view.joinedHumans} 人</strong>
         </div>
         <div>
-          <span>総席数</span>
-          <strong>{view.totalSeats}</strong>
+          <span>待機中の席数</span>
+          <strong>{view.totalSeats} 席</strong>
         </div>
         <div>
-          <span>bot 補充</span>
+          <span>開始予定</span>
           <strong>
-            {view.supportsBots ? (view.fillWithBots ? "開始時に補充する" : "補充しない") : "なし"}
+            人間 {view.joinedHumans} + BOT {view.botCount} = {view.startPlayerCount}
           </strong>
         </div>
       </div>
-      {canConfigureBots ? (
+      <p className="surface-status">{buildWaitingHint(view)}</p>
+      {isHost ? (
         <div className="waiting-controls">
-          <p className="surface-status">ホスト設定: 人数が足りない場合に bot を入れて開始するかを待機中に切り替えられます。</p>
-          <label className="checkbox-field">
-            <input
-              checked={view.fillWithBots}
-              disabled={waitingSettingsBusy}
-              onChange={(event) => onWaitingBotsChange?.(event.target.checked)}
-              type="checkbox"
-            />
-            <span>{waitingSettingsBusy ? "設定を更新中..." : "不足席を bot で補充して開始する"}</span>
-          </label>
+          {variableSeats ? (
+            <label className="field">
+              <span>待機席数</span>
+              <select
+                disabled={waitingSettingsBusy}
+                onChange={(event) =>
+                  onWaitingSettingsChange?.({
+                    seatCount: Number(event.target.value),
+                    botCount: Math.min(view.botCount, Math.max(0, Number(event.target.value) - view.joinedHumans))
+                  })
+                }
+                value={view.totalSeats}
+              >
+                {Array.from({ length: view.maxSeats - Math.max(view.minSeats, view.joinedHumans) + 1 }, (_, index) => {
+                  const value = Math.max(view.minSeats, view.joinedHumans) + index;
+                  return (
+                    <option key={value} value={value}>
+                      {value} 人
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          ) : null}
+          {view.supportsBots ? (
+            <label className="field">
+              <span>追加する bot 数</span>
+              <select
+                disabled={waitingSettingsBusy}
+                onChange={(event) => onWaitingSettingsChange?.({ botCount: Number(event.target.value) })}
+                value={view.botCount}
+              >
+                {botOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value} 体
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <button
+            className="primary-button"
+            disabled={waitingStartBusy || waitingSettingsBusy || !view.canStart}
+            onClick={() => onStartWaitingRoom?.()}
+          >
+            {waitingStartBusy ? "開始中..." : "試合開始"}
+          </button>
         </div>
       ) : null}
     </section>
   );
+}
+
+function buildWaitingHint(view: WaitingView): string {
+  if (view.joinedHumans < view.minHumanPlayers) {
+    return `開始には人間プレイヤーが最低 ${view.minHumanPlayers} 人必要です。`;
+  }
+
+  if (view.startPlayerCount < view.minSeats) {
+    return `開始人数は最低 ${view.minSeats} 人必要です。必要なら bot を追加してください。`;
+  }
+
+  if (view.minSeats === view.maxSeats && view.startPlayerCount !== view.maxSeats) {
+    return `${view.maxSeats} 人固定のゲームです。残り席を bot で埋めるか、人間プレイヤーの参加を待ってください。`;
+  }
+
+  return "ホストが bot 数を調整してから試合開始できます。";
 }
