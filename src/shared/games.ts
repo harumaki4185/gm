@@ -129,7 +129,13 @@ export function getDefaultRoomSettings(gameId: GameId): RoomSettings {
 }
 
 export function normalizeRoomSettings(gameId: GameId, settings?: Partial<RoomSettings>): RoomSettings {
-  const game = GAME_MAP[gameId];
+  const game = GAME_MAP[gameId] as GameCatalogEntry | undefined;
+  if (!game) {
+    return {
+      fillWithBots: false,
+      seatCount: 2
+    };
+  }
   const requestedSeatCount = Number.isFinite(settings?.seatCount)
     ? Math.trunc(settings?.seatCount ?? game.defaultSeats)
     : game.defaultSeats;

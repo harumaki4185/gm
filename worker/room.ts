@@ -19,7 +19,7 @@ import {
   finalizeByDisconnect,
   markDisconnectPending,
   resumeGameAfterReconnect
-} from "./games";
+} from "./games/index";
 import { json, toErrorResponse } from "./http";
 import type { Env, LifecycleAlarm, RoomRecord, StoredParticipant } from "./types";
 import {
