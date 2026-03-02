@@ -57,15 +57,20 @@ export default function App() {
 }
 
 function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
-  const [playerName, setPlayerName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
+  const [playerName, setPlayerName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
   const [pendingGameId, setPendingGameId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    window.localStorage.setItem(PLAYER_NAME_KEY, playerName);
+    writeStorage(PLAYER_NAME_KEY, playerName);
   }, [playerName]);
 
   const createRoom = async (gameId: CreateRoomRequest["gameId"]) => {
+    if (playerName.trim().length < 2) {
+      setError("表示名は 2 文字以上で入力してください。");
+      return;
+    }
+
     setPendingGameId(gameId);
     setError(null);
 
@@ -131,8 +136,8 @@ function RoomPage({
   navigate: (route: Route) => void;
 }) {
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(() => window.localStorage.getItem(`${ROOM_SESSION_KEY}${roomId}`));
-  const [joinName, setJoinName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
+  const [sessionId, setSessionId] = useState<string | null>(() => readStorage(`${ROOM_SESSION_KEY}${roomId}`));
+  const [joinName, setJoinName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshRevision, setRefreshRevision] = useState(0);
@@ -183,7 +188,7 @@ function RoomPage({
           return;
         }
         if (requestError instanceof ApiRequestError && [403, 404, 410].includes(requestError.status)) {
-          window.localStorage.removeItem(`${ROOM_SESSION_KEY}${roomId}`);
+          removeStorage(`${ROOM_SESSION_KEY}${roomId}`);
           setSessionId(null);
           setSnapshot(null);
         }
@@ -235,7 +240,7 @@ function RoomPage({
       reconnectBackoffRef.current += 1;
       reconnectAttemptsRef.current += 1;
       reconnectTimerRef.current = window.setTimeout(() => {
-        if (window.localStorage.getItem(`${ROOM_SESSION_KEY}${roomId}`) === sessionId) {
+        if (readStorage(`${ROOM_SESSION_KEY}${roomId}`) === sessionId) {
           setRefreshRevision((value) => value + 1);
         }
       }, delay);
@@ -266,8 +271,8 @@ function RoomPage({
         body: JSON.stringify({ playerName: joinName } satisfies JoinRoomRequest)
       });
       const payload = await parseResponse<RoomMutationResponse>(response);
-      window.localStorage.setItem(PLAYER_NAME_KEY, joinName);
-      window.localStorage.setItem(`${ROOM_SESSION_KEY}${roomId}`, payload.sessionId);
+      writeStorage(PLAYER_NAME_KEY, joinName);
+      writeStorage(`${ROOM_SESSION_KEY}${roomId}`, payload.sessionId);
       skipNextReconnectRef.current = true;
       setSessionId(payload.sessionId);
       setSnapshot(payload.snapshot);
@@ -321,7 +326,7 @@ function RoomPage({
   };
 
   const clearSession = () => {
-    window.localStorage.removeItem(`${ROOM_SESSION_KEY}${roomId}`);
+    removeStorage(`${ROOM_SESSION_KEY}${roomId}`);
     setSessionId(null);
     setSnapshot(null);
     setRefreshRevision(0);
@@ -429,7 +434,7 @@ function GameDetailPage({
 }) {
   const game = GAME_MAP[gameId];
   const defaultSettings = getDefaultRoomSettings(gameId);
-  const [playerName, setPlayerName] = useState(() => window.localStorage.getItem(PLAYER_NAME_KEY) ?? "");
+  const [playerName, setPlayerName] = useState(() => readStorage(PLAYER_NAME_KEY) ?? "");
   const [seatCount, setSeatCount] = useState(defaultSettings.seatCount);
   const [fillWithBots, setFillWithBots] = useState(defaultSettings.fillWithBots);
   const [pending, setPending] = useState(false);
@@ -448,6 +453,11 @@ function GameDetailPage({
   }
 
   const createRoom = async () => {
+    if (playerName.trim().length < 2) {
+      setError("表示名は 2 文字以上で入力してください。");
+      return;
+    }
+
     setPending(true);
     setError(null);
     try {
@@ -600,8 +610,8 @@ async function createRoomOnServer(
   });
 
   const payload = await parseResponse<RoomMutationResponse>(response);
-  window.localStorage.setItem(PLAYER_NAME_KEY, playerName);
-  window.localStorage.setItem(`${ROOM_SESSION_KEY}${payload.snapshot.roomId}`, payload.sessionId);
+  writeStorage(PLAYER_NAME_KEY, playerName);
+  writeStorage(`${ROOM_SESSION_KEY}${payload.snapshot.roomId}`, payload.sessionId);
   return payload;
 }
 
@@ -611,4 +621,28 @@ function formatSeatRange(gameId: GameId): string {
     return `${game.maxSeats} 人`;
   }
   return `${game.minSeats}-${game.maxSeats} 人`;
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // localStorage を使えない環境では永続化を諦める
+  }
+}
+
+function removeStorage(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // localStorage を使えない環境では削除失敗を握りつぶす
+  }
 }
