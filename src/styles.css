@@ -494,7 +494,8 @@ button {
   gap: 16px;
 }
 
-.old-maid-panel {
+.old-maid-panel,
+.card-hand-panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -507,7 +508,8 @@ button {
   box-shadow: inset 0 0 0 2px rgba(94, 58, 179, 0.26);
 }
 
-.old-maid-panel__meta {
+.old-maid-panel__meta,
+.card-hand-panel__meta {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -657,6 +659,7 @@ button {
 }
 
 .spades-trick {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 

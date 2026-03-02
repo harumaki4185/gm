@@ -1,5 +1,6 @@
-import { formatCardLabel, isRedCard } from "../../shared/cards";
+import { formatCardLabel } from "../../shared/cards";
 import type { ClientAction, SpadesView } from "../../shared/types";
+import { getPlayingCardClass } from "./cardUi";
 
 interface SpadesSurfaceProps {
   view: SpadesView;
@@ -41,15 +42,15 @@ export function SpadesSurface({ view, onAction }: SpadesSurfaceProps) {
         {view.currentTrick.map((entry) => (
           <div className="spades-trick__slot" key={entry.seat}>
             <span>席 {entry.seat + 1}</span>
-            <strong className={entry.card ? playingCardClass(entry.card) : "spades-trick__empty"}>
+            <strong className={entry.card ? getPlayingCardClass(entry.card) : "spades-trick__empty"}>
               {entry.card ? formatCardLabel(entry.card) : "..." }
             </strong>
           </div>
         ))}
       </div>
 
-      <div className="old-maid-panel">
-        <div className="old-maid-panel__meta">
+      <div className="card-hand-panel">
+        <div className="card-hand-panel__meta">
           <span>自分の手札</span>
           <strong>{view.selfHand.length} 枚</strong>
         </div>
@@ -76,7 +77,7 @@ export function SpadesSurface({ view, onAction }: SpadesSurfaceProps) {
               const legal = view.legalCards.includes(card);
               return (
                 <button
-                  className={playingCardClass(card)}
+                  className={getPlayingCardClass(card)}
                   disabled={!view.canPlay || !legal}
                   key={card}
                   onClick={() => onAction({ type: "play_card", card })}
@@ -91,8 +92,4 @@ export function SpadesSurface({ view, onAction }: SpadesSurfaceProps) {
       </div>
     </section>
   );
-}
-
-function playingCardClass(card: string): string {
-  return `playing-card ${isRedCard(card) ? "playing-card--red" : "playing-card--black"}`;
 }

@@ -1,5 +1,6 @@
 import {
   CARD_SUITS,
+  compareCards,
   createStandardDeck,
   formatCardLabel,
   getCardRankValue,
@@ -112,6 +113,13 @@ export function applySevensAction(room: RoomRecord, seat: number, action: Client
 
     state.passCounts[seat] = (state.passCounts[seat] ?? 0) + 1;
     state.lastAction = `${formatPlayerLabel(room, seat)} がパスしました`;
+    if (!hasAnyPlayableSevensCard(state)) {
+      room.roomStatus = "finished";
+      state.currentSeat = null;
+      state.winnerSeats = [];
+      state.statusMessage = "これ以上出せるカードがないため引き分けです";
+      return;
+    }
     moveToNextSevensTurn(room, state, seat);
     return;
   }
@@ -139,6 +147,14 @@ export function applySevensAction(room: RoomRecord, seat: number, action: Client
     state.currentSeat = null;
     state.winnerSeats = [seat];
     state.statusMessage = formatWinnerMessage([seat], "勝ちです");
+    return;
+  }
+
+  if (!hasAnyPlayableSevensCard(state)) {
+    room.roomStatus = "finished";
+    state.currentSeat = null;
+    state.winnerSeats = [];
+    state.statusMessage = "これ以上出せるカードがないため引き分けです";
     return;
   }
 
@@ -255,6 +271,10 @@ function getNextSevensSeat(state: SevensState, seat: number): number | null {
   return null;
 }
 
+function hasAnyPlayableSevensCard(state: SevensState): boolean {
+  return state.hands.some((hand) => hand.length > 0 && getLegalSevensCardsForHand(hand, state.suitRanges).length > 0);
+}
+
 function pickSevensBotCard(legalCards: readonly string[]): string {
   return legalCards
     .slice()
@@ -264,6 +284,6 @@ function pickSevensBotCard(legalCards: readonly string[]): string {
       if (leftDistance !== rightDistance) {
         return rightDistance - leftDistance;
       }
-      return sortCards([left, right])[0] === left ? -1 : 1;
+      return compareCards(left, right);
     })[0];
 }

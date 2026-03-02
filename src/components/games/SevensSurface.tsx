@@ -1,5 +1,6 @@
-import { formatCardLabel, isRedCard } from "../../shared/cards";
+import { formatCardLabel } from "../../shared/cards";
 import type { ClientAction, SevensView } from "../../shared/types";
+import { getPlayingCardClass } from "./cardUi";
 
 const SEVENS_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 const SUIT_LABELS: Record<SevensView["suits"][number]["suit"], string> = {
@@ -57,8 +58,8 @@ export function SevensSurface({ view, onAction }: SevensSurfaceProps) {
         ))}
       </div>
 
-      <div className="old-maid-panel">
-        <div className="old-maid-panel__meta">
+      <div className="card-hand-panel">
+        <div className="card-hand-panel__meta">
           <span>自分の手札</span>
           <strong>{view.selfHand.length} 枚</strong>
         </div>
@@ -67,7 +68,7 @@ export function SevensSurface({ view, onAction }: SevensSurfaceProps) {
             const legal = view.legalCards.includes(card);
             return (
               <button
-                className={playingCardClass(card)}
+                className={getPlayingCardClass(card)}
                 disabled={!view.canAct || !legal}
                 key={card}
                 onClick={() => onAction({ type: "play_card", card })}
@@ -88,8 +89,4 @@ export function SevensSurface({ view, onAction }: SevensSurfaceProps) {
       </div>
     </section>
   );
-}
-
-function playingCardClass(card: string): string {
-  return `playing-card ${isRedCard(card) ? "playing-card--red" : "playing-card--black"}`;
 }
