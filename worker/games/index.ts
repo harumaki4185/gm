@@ -3,6 +3,7 @@ import type { ClientAction, GameView } from "../../src/shared/types";
 import { AppError } from "../errors";
 import type { InternalGameState, RoomRecord } from "../types";
 import {
+  advanceBoardBotTurns,
   applyConnect4Action,
   applyPlacementAction,
   buildBoardView,
@@ -11,7 +12,12 @@ import {
   createOthelloState
 } from "./board";
 import { formatPlayerLabel, formatTurnMessage, formatWinnerMessage } from "./common";
-import { applyJankenAction, buildJankenView, createJankenState } from "./janken";
+import {
+  advanceJankenBotTurns,
+  applyJankenAction,
+  buildJankenView,
+  createJankenState
+} from "./janken";
 import {
   advanceOldMaidBotTurns,
   applyOldMaidAction,
@@ -285,6 +291,20 @@ export function finalizeByDisconnect(room: RoomRecord, disconnectedSeat: number)
 
 export function advanceAutomatedTurns(room: RoomRecord): void {
   if (room.roomStatus !== "playing") {
+    return;
+  }
+
+  if (room.gameState.type === "janken") {
+    advanceJankenBotTurns(room);
+    return;
+  }
+
+  if (
+    room.gameState.type === "connect4" ||
+    room.gameState.type === "gomoku" ||
+    room.gameState.type === "othello"
+  ) {
+    advanceBoardBotTurns(room);
     return;
   }
 

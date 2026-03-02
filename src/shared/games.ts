@@ -11,8 +11,8 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     defaultSeats: 2,
     minSeats: 2,
     maxSeats: 2,
-    minHumanPlayers: 2,
-    supportsBots: false,
+    minHumanPlayers: 1,
+    supportsBots: true,
     accent: "#1f8f4d"
   },
   {
@@ -25,8 +25,8 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     defaultSeats: 2,
     minSeats: 2,
     maxSeats: 2,
-    minHumanPlayers: 2,
-    supportsBots: false,
+    minHumanPlayers: 1,
+    supportsBots: true,
     accent: "#3d2b1f"
   },
   {
@@ -39,8 +39,8 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     defaultSeats: 2,
     minSeats: 2,
     maxSeats: 2,
-    minHumanPlayers: 2,
-    supportsBots: false,
+    minHumanPlayers: 1,
+    supportsBots: true,
     accent: "#f4b000"
   },
   {
@@ -53,8 +53,8 @@ export const GAME_CATALOG: GameCatalogEntry[] = [
     defaultSeats: 2,
     minSeats: 2,
     maxSeats: 6,
-    minHumanPlayers: 2,
-    supportsBots: false,
+    minHumanPlayers: 1,
+    supportsBots: true,
     accent: "#ff6b35"
   },
   {
@@ -123,7 +123,7 @@ export function getDefaultRoomSettings(gameId: GameId): RoomSettings {
     };
   }
   return {
-    fillWithBots: game.supportsBots,
+    fillWithBots: false,
     seatCount: game.defaultSeats
   };
 }
@@ -141,7 +141,7 @@ export function normalizeRoomSettings(gameId: GameId, settings?: Partial<RoomSet
     : game.defaultSeats;
   const seatCount = Math.min(game.maxSeats, Math.max(game.minSeats, requestedSeatCount));
   const requestedFillWithBots =
-    typeof settings?.fillWithBots === "boolean" ? settings.fillWithBots : game.supportsBots;
+    typeof settings?.fillWithBots === "boolean" ? settings.fillWithBots : false;
 
   return {
     fillWithBots: game.supportsBots ? requestedFillWithBots : false,

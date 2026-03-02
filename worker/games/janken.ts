@@ -3,6 +3,8 @@ import { AppError } from "../errors";
 import type { JankenState, RoomRecord } from "../types";
 import { formatWinnerMessage } from "./common";
 
+const JANKEN_CHOICES: JankenChoice[] = ["rock", "paper", "scissors"];
+
 export function createJankenState(seatCount: number): JankenState {
   return {
     type: "janken",
@@ -37,7 +39,7 @@ export function buildJankenView(room: RoomRecord, state: JankenState, selfSeat: 
       selfSeat !== null &&
       selfSeat < state.selections.length &&
       state.selections[selfSeat] === null,
-    choices: ["rock", "paper", "scissors"],
+    choices: JANKEN_CHOICES,
     selections,
     resultMessage: state.resultMessage,
     currentSeat: null,
@@ -64,7 +66,37 @@ export function applyJankenAction(room: RoomRecord, seat: number, action: Client
   }
 
   state.selections[seat] = action.choice;
+  resolveJankenState(room, state);
+}
 
+export function advanceJankenBotTurns(room: RoomRecord): void {
+  if (room.roomStatus !== "playing" || room.gameState.type !== "janken" || room.gameState.phase !== "playing") {
+    return;
+  }
+
+  let updated = false;
+  for (let seat = 0; seat < room.gameState.selections.length; seat += 1) {
+    if (room.gameState.selections[seat] !== null) {
+      continue;
+    }
+
+    const player = room.players.find((entry) => entry.seat === seat);
+    if (!player || player.playerType !== "bot") {
+      continue;
+    }
+
+    room.gameState.selections[seat] = JANKEN_CHOICES[Math.floor(Math.random() * JANKEN_CHOICES.length)];
+    updated = true;
+  }
+
+  if (!updated) {
+    return;
+  }
+
+  resolveJankenState(room, room.gameState);
+}
+
+function resolveJankenState(room: RoomRecord, state: JankenState): void {
   if (state.selections.some((choice) => choice === null)) {
     state.resultMessage = "他のプレイヤーの入力を待っています";
     return;

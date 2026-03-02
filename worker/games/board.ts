@@ -10,6 +10,7 @@ import { formatPlayerLabel, formatTurnMessage } from "./common";
 
 const CONNECT4_WIN_LENGTH = 4;
 const GOMOKU_WIN_LENGTH = 5;
+const MAX_BOT_ITERATIONS = 128;
 
 export function createGomokuState(startingSeat: number): PlacementState {
   const board = createBoard(15, 15);
@@ -197,6 +198,235 @@ export function applyPlacementAction(room: RoomRecord, seat: number, action: Cli
   state.statusMessage =
     state.winnerSeat === null ? "引き分けです" : `${formatPlayerLabel(room, state.winnerSeat)} の勝ちです`;
   room.roomStatus = "finished";
+}
+
+export function advanceBoardBotTurns(room: RoomRecord): void {
+  if (room.roomStatus !== "playing") {
+    return;
+  }
+
+  let iterations = 0;
+  while (room.roomStatus === "playing") {
+    iterations += 1;
+    if (iterations > MAX_BOT_ITERATIONS) {
+      finalizeBoardByBotOverflow(room);
+      return;
+    }
+
+    if (room.gameState.type === "connect4") {
+      const seat = room.gameState.currentSeat;
+      const player = room.players.find((entry) => entry.seat === seat);
+      if (!player || player.playerType !== "bot") {
+        return;
+      }
+
+      applyConnect4Action(room, seat, {
+        type: "drop_disc",
+        col: pickConnect4BotColumn(room.gameState)
+      });
+      continue;
+    }
+
+    if (room.gameState.type === "gomoku" || room.gameState.type === "othello") {
+      const seat = room.gameState.currentSeat;
+      const player = room.players.find((entry) => entry.seat === seat);
+      if (!player || player.playerType !== "bot") {
+        return;
+      }
+
+      const move =
+        room.gameState.type === "gomoku"
+          ? pickGomokuBotMove(room.gameState)
+          : pickOthelloBotMove(room.gameState);
+      applyPlacementAction(room, seat, {
+        type: "place_piece",
+        row: move.row,
+        col: move.col
+      });
+      continue;
+    }
+
+    return;
+  }
+}
+
+function finalizeBoardByBotOverflow(room: RoomRecord): void {
+  room.roomStatus = "finished";
+
+  if (room.gameState.type === "connect4") {
+    room.gameState.winnerSeat = null;
+    room.gameState.winningLine = [];
+    room.gameState.statusMessage = "bot の自動進行が上限に達したため終了しました";
+    return;
+  }
+
+  if (room.gameState.type === "gomoku" || room.gameState.type === "othello") {
+    room.gameState.winnerSeat = null;
+    room.gameState.winningLine = [];
+    room.gameState.statusMessage = "bot の自動進行が上限に達したため終了しました";
+  }
+}
+
+function pickConnect4BotColumn(state: Connect4State): number {
+  const legalColumns = getLegalColumns(state.board);
+  const preferredColumns = sortColumnsByCenter(legalColumns, getColumnCount(state.board));
+
+  const winningColumn = preferredColumns.find((col) =>
+    wouldConnect4MoveWin(state.board, col, state.currentSeat)
+  );
+  if (winningColumn !== undefined) {
+    return winningColumn;
+  }
+
+  const opponentSeat = state.currentSeat === 0 ? 1 : 0;
+  const blockingColumn = preferredColumns.find((col) =>
+    wouldConnect4MoveWin(state.board, col, opponentSeat)
+  );
+  if (blockingColumn !== undefined) {
+    return blockingColumn;
+  }
+
+  return preferredColumns[0] ?? legalColumns[0] ?? 0;
+}
+
+function wouldConnect4MoveWin(
+  board: Array<Array<number | null>>,
+  col: number,
+  seat: number
+): boolean {
+  const row = findDropRow(board, col);
+  if (row === null) {
+    return false;
+  }
+
+  const trial = cloneBoard(board);
+  trial[row][col] = seat;
+  return findWinningLine(trial, row, col, seat, CONNECT4_WIN_LENGTH).length > 0;
+}
+
+function pickGomokuBotMove(state: PlacementState): BoardPosition {
+  const preferredMoves = sortMovesByCenter(state.legalMoves, state.board);
+  const winningMove = preferredMoves.find((move) =>
+    wouldPlacementMoveWin(state.board, move, state.currentSeat, GOMOKU_WIN_LENGTH)
+  );
+  if (winningMove) {
+    return winningMove;
+  }
+
+  const opponentSeat = state.currentSeat === 0 ? 1 : 0;
+  const blockingMove = preferredMoves.find((move) =>
+    wouldPlacementMoveWin(state.board, move, opponentSeat, GOMOKU_WIN_LENGTH)
+  );
+  if (blockingMove) {
+    return blockingMove;
+  }
+
+  return preferredMoves[0] ?? state.legalMoves[0] ?? { row: 0, col: 0 };
+}
+
+function wouldPlacementMoveWin(
+  board: Array<Array<number | null>>,
+  move: BoardPosition,
+  seat: number,
+  lineLength: number
+): boolean {
+  if (board[move.row]?.[move.col] !== null) {
+    return false;
+  }
+
+  const trial = cloneBoard(board);
+  trial[move.row][move.col] = seat;
+  return findWinningLine(trial, move.row, move.col, seat, lineLength).length > 0;
+}
+
+function pickOthelloBotMove(state: PlacementState): BoardPosition {
+  const rowLimit = state.board.length - 1;
+  const colLimit = getColumnCount(state.board) - 1;
+  let bestMove = state.legalMoves[0] ?? { row: 0, col: 0 };
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const move of state.legalMoves) {
+    const flips = getOthelloFlips(state.board, move.row, move.col, state.currentSeat);
+    let score = flips.length * 6;
+
+    const isCorner =
+      (move.row === 0 || move.row === rowLimit) && (move.col === 0 || move.col === colLimit);
+    const isEdge = move.row === 0 || move.row === rowLimit || move.col === 0 || move.col === colLimit;
+    if (isCorner) {
+      score += 100;
+    } else if (isEdge) {
+      score += 20;
+    }
+
+    if (isDiagonalCornerTrap(state.board, move, rowLimit, colLimit)) {
+      score -= 30;
+    }
+
+    score -= Math.abs(move.row - rowLimit / 2) + Math.abs(move.col - colLimit / 2);
+
+    if (score > bestScore) {
+      bestMove = move;
+      bestScore = score;
+    }
+  }
+
+  return bestMove;
+}
+
+function isDiagonalCornerTrap(
+  board: Array<Array<number | null>>,
+  move: BoardPosition,
+  rowLimit: number,
+  colLimit: number
+): boolean {
+  const traps: Array<{ row: number; col: number; cornerRow: number; cornerCol: number }> = [
+    { row: 1, col: 1, cornerRow: 0, cornerCol: 0 },
+    { row: 1, col: colLimit - 1, cornerRow: 0, cornerCol: colLimit },
+    { row: rowLimit - 1, col: 1, cornerRow: rowLimit, cornerCol: 0 },
+    { row: rowLimit - 1, col: colLimit - 1, cornerRow: rowLimit, cornerCol: colLimit }
+  ];
+
+  return traps.some(
+    (trap) =>
+      trap.row === move.row &&
+      trap.col === move.col &&
+      board[trap.cornerRow]?.[trap.cornerCol] === null
+  );
+}
+
+function cloneBoard(board: Array<Array<number | null>>): Array<Array<number | null>> {
+  return board.map((row) => [...row]);
+}
+
+function sortColumnsByCenter(columns: number[], columnCount: number): number[] {
+  const center = (columnCount - 1) / 2;
+  return [...columns].sort((left, right) => {
+    const leftDistance = Math.abs(left - center);
+    const rightDistance = Math.abs(right - center);
+    if (leftDistance !== rightDistance) {
+      return leftDistance - rightDistance;
+    }
+    return left - right;
+  });
+}
+
+function sortMovesByCenter(
+  moves: readonly BoardPosition[],
+  board: Array<Array<number | null>>
+): BoardPosition[] {
+  const centerRow = (board.length - 1) / 2;
+  const centerCol = (getColumnCount(board) - 1) / 2;
+  return [...moves].sort((left, right) => {
+    const leftDistance = Math.abs(left.row - centerRow) + Math.abs(left.col - centerCol);
+    const rightDistance = Math.abs(right.row - centerRow) + Math.abs(right.col - centerCol);
+    if (leftDistance !== rightDistance) {
+      return leftDistance - rightDistance;
+    }
+    if (left.row !== right.row) {
+      return left.row - right.row;
+    }
+    return left.col - right.col;
+  });
 }
 
 function createBoard(rows: number, cols: number): Array<Array<number | null>> {

@@ -160,6 +160,7 @@ export class RoomDurableObject {
       }
     };
 
+    maybeStartRoom(room);
     await this.saveRoom(room);
     await this.syncAlarm(room.lifecycleAlarm);
     return json<RoomMutationResponse>({
