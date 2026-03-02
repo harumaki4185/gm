@@ -15,6 +15,7 @@ interface GameSurfaceProps {
 
 export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
   const view = snapshot.gameView;
+  const isSpectator = snapshot.selfSeat === null && snapshot.roomStatus !== "waiting";
 
   if (view.kind === "waiting") {
     return <WaitingSurface view={view} />;
@@ -29,15 +30,15 @@ export function GameSurface({ snapshot, onAction }: GameSurfaceProps) {
   }
 
   if (view.kind === "old-maid") {
-    return <OldMaidSurface onAction={onAction} view={view} />;
+    return <OldMaidSurface isSpectator={isSpectator} onAction={onAction} view={view} />;
   }
 
   if (view.kind === "sevens") {
-    return <SevensSurface onAction={onAction} view={view} />;
+    return <SevensSurface isSpectator={isSpectator} onAction={onAction} view={view} />;
   }
 
   if (view.kind === "spades") {
-    return <SpadesSurface onAction={onAction} view={view} />;
+    return <SpadesSurface isSpectator={isSpectator} onAction={onAction} view={view} />;
   }
 
   return <BoardSurface gameTitle={GAME_MAP[snapshot.gameId].title} onAction={onAction} view={view} />;

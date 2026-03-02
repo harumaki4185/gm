@@ -58,16 +58,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     if (request.method === "GET" && action === "ws") {
       const sessionId = url.searchParams.get("sessionId");
-      if (!sessionId) {
-        return apiError("sessionId が必要です", 400);
-      }
       if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
         return apiError("WebSocket 接続が必要です", 400);
       }
       if (!isAllowedWebSocketOrigin(request)) {
         return apiError("不正な接続元です", 403);
       }
-      return stub.fetch(`https://room.internal/ws?sessionId=${encodeURIComponent(sessionId)}`, request);
+      return stub.fetch(
+        `https://room.internal/ws${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`,
+        request
+      );
     }
 
     if (request.method !== "POST") {

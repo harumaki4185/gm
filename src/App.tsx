@@ -182,6 +182,9 @@ function RoomPage({
         if (!cancelled) {
           setSnapshot(payload);
           setError(null);
+          if (payload.roomStatus !== "waiting") {
+            setSocketRevision((value) => value + 1);
+          }
         }
       } catch (requestError) {
         if (cancelled) {
@@ -204,13 +207,18 @@ function RoomPage({
   }, [roomId, sessionId, refreshRevision]);
 
   useEffect(() => {
-    if (!sessionId || !snapshot) {
+    if (!snapshot) {
+      return;
+    }
+
+    if (!sessionId && snapshot.roomStatus === "waiting") {
       return;
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const sessionQuery = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
     const socket = new WebSocket(
-      `${protocol}//${window.location.host}/api/rooms/${roomId}/ws?sessionId=${encodeURIComponent(sessionId)}`
+      `${protocol}//${window.location.host}/api/rooms/${roomId}/ws${sessionQuery}`
     );
     let intentionalClose = false;
 
@@ -240,7 +248,7 @@ function RoomPage({
       reconnectBackoffRef.current += 1;
       reconnectAttemptsRef.current += 1;
       reconnectTimerRef.current = window.setTimeout(() => {
-        if (readStorage(`${ROOM_SESSION_KEY}${roomId}`) === sessionId) {
+        if (!sessionId || readStorage(`${ROOM_SESSION_KEY}${roomId}`) === sessionId) {
           setRefreshRevision((value) => value + 1);
         }
       }, delay);
@@ -253,19 +261,7 @@ function RoomPage({
       }
       socket.close();
     };
-  }, [roomId, sessionId, socketRevision]);
-
-  useEffect(() => {
-    if (sessionId || !snapshot || snapshot.roomStatus === "waiting") {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setRefreshRevision((value) => value + 1);
-    }, 2500);
-
-    return () => window.clearInterval(timer);
-  }, [sessionId, snapshot?.roomStatus]);
+  }, [roomId, sessionId, socketRevision, Boolean(snapshot) && (sessionId !== null || snapshot?.roomStatus !== "waiting")]);
 
   const joinRoom = async () => {
     if (joinName.trim().length < 2) {

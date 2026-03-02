@@ -4,9 +4,10 @@ import type { ClientAction, OldMaidView } from "../../shared/types";
 interface OldMaidSurfaceProps {
   view: OldMaidView;
   onAction: (action: ClientAction) => void;
+  isSpectator: boolean;
 }
 
-export function OldMaidSurface({ view, onAction }: OldMaidSurfaceProps) {
+export function OldMaidSurface({ view, onAction, isSpectator }: OldMaidSurfaceProps) {
   return (
     <section className="surface-card">
       <h2>ババ抜き</h2>
@@ -41,15 +42,24 @@ export function OldMaidSurface({ view, onAction }: OldMaidSurfaceProps) {
           ))}
         </div>
         <div className="old-maid-panel">
-          <span>自分の手札</span>
-          <strong>{view.selfHand.length} 枚</strong>
-          <div className="old-maid-hand">
-            {view.selfHand.map((card) => (
-              <div className={cardClass(card)} key={card}>
-                {formatCardLabel(card)}
+          {isSpectator ? (
+            <>
+              <span>観戦中</span>
+              <p className="surface-status">非公開の手札情報は表示されません。</p>
+            </>
+          ) : (
+            <>
+              <span>自分の手札</span>
+              <strong>{view.selfHand.length} 枚</strong>
+              <div className="old-maid-hand">
+                {view.selfHand.map((card) => (
+                  <div className={cardClass(card)} key={card}>
+                    {formatCardLabel(card)}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </section>

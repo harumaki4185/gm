@@ -32,6 +32,7 @@ import { getNextHumanSeat, nowIso, plusMs, resolveTeam, sanitizePlayerName } fro
 export class RoomDurableObject {
   private readonly storage: DurableObjectStorage;
   private readonly connections = new Map<string, Set<WebSocket>>();
+  private readonly spectatorConnections = new Set<WebSocket>();
 
   constructor(private readonly state: DurableObjectState, _env: Env) {
     this.storage = state.storage;
@@ -69,7 +70,6 @@ export class RoomDurableObject {
 
       if (url.pathname === "/ws" && request.method === "GET") {
         const sessionId = url.searchParams.get("sessionId");
-        assert(sessionId, "sessionId が必要です", 400);
         return this.handleWebSocket(sessionId);
       }
 
@@ -301,11 +301,8 @@ export class RoomDurableObject {
     return json(this.makeSnapshot(room, body.sessionId));
   }
 
-  private async handleWebSocket(sessionId: string): Promise<Response> {
+  private async handleWebSocket(sessionId: string | null): Promise<Response> {
     const room = await this.requireRoom();
-    const participant = room.players.find((player) => player.sessionId === sessionId);
-    assert(participant, "このセッションはルームに参加していません", 403);
-    assert(participant.connected, "先に再接続処理を完了してください", 409);
     assert(room.lifecycleAlarm?.kind !== "cleanup", "このルームは終了処理中です", 410);
 
     const pair = new WebSocketPair();
@@ -313,27 +310,48 @@ export class RoomDurableObject {
     const server = pair[1];
     server.accept();
 
-    this.trackSocket(sessionId, server);
-    this.sendSnapshot(sessionId, room);
+    if (sessionId) {
+      const participant = room.players.find((player) => player.sessionId === sessionId);
+      assert(participant, "このセッションはルームに参加していません", 403);
+      assert(participant.connected, "先に再接続処理を完了してください", 409);
+      this.trackSocket(sessionId, server);
+      this.sendSnapshot(sessionId, room);
+    } else {
+      assert(room.roomStatus !== "waiting", "観戦はゲーム開始後に可能です", 409);
+      this.trackSpectatorSocket(server);
+      this.sendSpectatorSnapshot(room);
+    }
 
     server.addEventListener("message", (event) => {
       if (typeof event.data !== "string" || event.data !== "ping") {
         try {
           server.close(1008, "invalid_message");
         } catch {
-          this.untrackSocket(sessionId, server);
+          if (sessionId) {
+            this.untrackSocket(sessionId, server);
+          } else {
+            this.untrackSpectatorSocket(server);
+          }
         }
         return;
       }
       try {
         server.send("pong");
       } catch {
-        this.untrackSocket(sessionId, server);
+        if (sessionId) {
+          this.untrackSocket(sessionId, server);
+        } else {
+          this.untrackSpectatorSocket(server);
+        }
       }
     });
 
     server.addEventListener("close", () => {
-      this.handleSocketClose(sessionId, server).catch(() => {});
+      if (sessionId) {
+        this.handleSocketClose(sessionId, server).catch(() => {});
+        return;
+      }
+      this.untrackSpectatorSocket(server);
     });
 
     return new Response(null, {
@@ -399,6 +417,14 @@ export class RoomDurableObject {
     }
   }
 
+  private trackSpectatorSocket(socket: WebSocket): void {
+    this.spectatorConnections.add(socket);
+  }
+
+  private untrackSpectatorSocket(socket: WebSocket): void {
+    this.spectatorConnections.delete(socket);
+  }
+
   private async requireRoom(): Promise<RoomRecord> {
     const room = await this.storage.get<RoomRecord>("room");
     if (!room) {
@@ -436,7 +462,15 @@ export class RoomDurableObject {
         }
       }
     }
+    for (const socket of this.spectatorConnections) {
+      try {
+        socket.close(1000, "room_closed");
+      } catch {
+        this.untrackSpectatorSocket(socket);
+      }
+    }
     this.connections.clear();
+    this.spectatorConnections.clear();
     await this.storage.deleteAll();
   }
 
@@ -447,6 +481,7 @@ export class RoomDurableObject {
       }
       this.sendSnapshot(player.sessionId, room);
     }
+    this.sendSpectatorSnapshot(room);
   }
 
   private sendSnapshot(sessionId: string, room: RoomRecord): void {
@@ -464,6 +499,25 @@ export class RoomDurableObject {
         socket.send(payload);
       } catch {
         this.untrackSocket(sessionId, socket);
+      }
+    }
+  }
+
+  private sendSpectatorSnapshot(room: RoomRecord): void {
+    if (this.spectatorConnections.size === 0) {
+      return;
+    }
+
+    const payload = JSON.stringify({
+      type: "snapshot",
+      snapshot: this.makeSnapshot(room, null)
+    });
+
+    for (const socket of this.spectatorConnections) {
+      try {
+        socket.send(payload);
+      } catch {
+        this.untrackSpectatorSocket(socket);
       }
     }
   }

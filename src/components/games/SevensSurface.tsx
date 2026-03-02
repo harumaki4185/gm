@@ -13,9 +13,10 @@ const SUIT_LABELS: Record<SevensView["suits"][number]["suit"], string> = {
 interface SevensSurfaceProps {
   view: SevensView;
   onAction: (action: ClientAction) => void;
+  isSpectator: boolean;
 }
 
-export function SevensSurface({ view, onAction }: SevensSurfaceProps) {
+export function SevensSurface({ view, onAction, isSpectator }: SevensSurfaceProps) {
   return (
     <section className="surface-card">
       <h2>七並べ</h2>
@@ -61,32 +62,38 @@ export function SevensSurface({ view, onAction }: SevensSurfaceProps) {
 
       <div className="card-hand-panel">
         <div className="card-hand-panel__meta">
-          <span>自分の手札</span>
-          <strong>{view.selfHand.length} 枚</strong>
+          <span>{isSpectator ? "観戦中" : "自分の手札"}</span>
+          <strong>{isSpectator ? "Hidden" : `${view.selfHand.length} 枚`}</strong>
         </div>
-        <div className="sevens-hand">
-          {view.selfHand.map((card) => {
-            const legal = view.legalCards.includes(card);
-            return (
-              <button
-                className={getPlayingCardClass(card)}
-                disabled={!view.canAct || !legal}
-                key={card}
-                onClick={() => onAction({ type: "play_card", card })}
-                title={legal ? "このカードを出す" : "まだ出せません"}
-              >
-                {formatCardLabel(card)}
-              </button>
-            );
-          })}
-        </div>
-        <button
-          className="ghost-button"
-          disabled={!view.canAct || view.legalCards.length > 0}
-          onClick={() => onAction({ type: "pass_sevens" })}
-        >
-          パス
-        </button>
+        {isSpectator ? (
+          <p className="surface-status">非公開の手札情報は表示されません。</p>
+        ) : (
+          <>
+            <div className="sevens-hand">
+              {view.selfHand.map((card) => {
+                const legal = view.legalCards.includes(card);
+                return (
+                  <button
+                    className={getPlayingCardClass(card)}
+                    disabled={!view.canAct || !legal}
+                    key={card}
+                    onClick={() => onAction({ type: "play_card", card })}
+                    title={legal ? "このカードを出す" : "まだ出せません"}
+                  >
+                    {formatCardLabel(card)}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              className="ghost-button"
+              disabled={!view.canAct || view.legalCards.length > 0}
+              onClick={() => onAction({ type: "pass_sevens" })}
+            >
+              パス
+            </button>
+          </>
+        )}
       </div>
     </section>
   );

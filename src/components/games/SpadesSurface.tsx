@@ -5,9 +5,10 @@ import { getPlayingCardClass } from "./cardUi";
 interface SpadesSurfaceProps {
   view: SpadesView;
   onAction: (action: ClientAction) => void;
+  isSpectator: boolean;
 }
 
-export function SpadesSurface({ view, onAction }: SpadesSurfaceProps) {
+export function SpadesSurface({ view, onAction, isSpectator }: SpadesSurfaceProps) {
   return (
     <section className="surface-card">
       <h2>スペード</h2>
@@ -51,14 +52,16 @@ export function SpadesSurface({ view, onAction }: SpadesSurfaceProps) {
 
       <div className="card-hand-panel">
         <div className="card-hand-panel__meta">
-          <span>自分の手札</span>
-          <strong>{view.selfHand.length} 枚</strong>
+          <span>{isSpectator ? "観戦中" : "自分の手札"}</span>
+          <strong>{isSpectator ? "Hidden" : `${view.selfHand.length} 枚`}</strong>
         </div>
         <p className="surface-status">
           完了トリック {view.completedTricks} / 13 {view.spadesBroken ? " / スペード解禁済み" : ""}
         </p>
 
-        {view.stage === "bidding" ? (
+        {isSpectator ? (
+          <p className="surface-status">非公開の手札情報は表示されません。</p>
+        ) : view.stage === "bidding" ? (
           <div className="spades-bids">
             {view.bidOptions.map((bid) => (
               <button
